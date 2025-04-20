@@ -14,6 +14,9 @@ from PIL import Image
 import folium
 import pillow_heif
 
+import nest_asyncio
+nest_asyncio.apply()
+
 # Register the HEIF file format plugin
 pillow_heif.register_heif_opener()
 
