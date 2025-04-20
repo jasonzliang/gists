@@ -1,6 +1,7 @@
 import io
 import os
 import sys
+import types
 import tempfile
 import time
 import traceback
@@ -13,9 +14,12 @@ from geopy.geocoders import Nominatim
 from PIL import Image
 import folium
 import pillow_heif
+import torch
 
-import nest_asyncio
-nest_asyncio.apply()
+# Try to fix an error
+dummy_module = types.ModuleType("dummy_classes")
+dummy_module.__path__ = []
+sys.modules["torch.classes"] = dummy_module
 
 # Register the HEIF file format plugin
 pillow_heif.register_heif_opener()
