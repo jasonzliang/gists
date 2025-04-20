@@ -168,11 +168,12 @@ def convert_image(uploaded_file):
             raise
     else:
         # Handle other formats (WebP, AVIF, regular formats)
+        # For AVIF: pip install pillow-avif-plugin
         try:
             image = Image.open(io.BytesIO(file_bytes))
         except Exception as e:
             st.error(f"Error opening image: {e}")
-            st.info("If you're trying to open an AVIF image, make sure your Pillow version supports it or convert it to another format.")
+            st.info("If you're trying to open an AVIF image, make sure your Pillow installation has AVIF support installed: pip install pillow-avif-plugin")
             raise
 
     # Convert to RGB if needed (in case of RGBA or other formats)
