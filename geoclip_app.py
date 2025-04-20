@@ -6,15 +6,16 @@ import tempfile
 import time
 import traceback
 
+import torch
 import numpy as np
-import streamlit as st
-from streamlit_folium import folium_static
+import folium
 from geoclip import GeoCLIP
 from geopy.geocoders import Nominatim
 from PIL import Image
-import folium
 import pillow_heif
-import torch
+import pillow_avif
+import streamlit as st
+from streamlit_folium import folium_static
 
 # Try to fix an error
 dummy_module = types.ModuleType("dummy_classes")
@@ -279,4 +280,4 @@ if __name__ == "__main__":
         main()
     except Exception as e:
         st.error(f"An unexpected error occurred: {e}")
-        st.info("Please check that all required packages are installed:\n```\npip install streamlit geoclip geopy folium streamlit-folium pillow pillow-heif\n```")
+        st.info("Please check that all required packages are installed:\n```\npip install streamlit geoclip geopy folium streamlit-folium pillow pillow-heif pillow-avif-plugin\n```")
