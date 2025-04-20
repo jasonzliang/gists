@@ -8,7 +8,7 @@ import traceback
 
 import numpy as np
 import streamlit as st
-from streamlit_folium import folium_static
+from streamlit_folium import st_folium
 from geoclip import GeoCLIP
 from geopy.geocoders import Nominatim
 from PIL import Image
@@ -230,7 +230,7 @@ def main():
                         with col2:
                             st.subheader("Predicted Locations")
                             map_obj = create_map(results)
-                            folium_static(map_obj, width=600)
+                            st_folium(map_obj, width=600)
 
                         # Display detailed results
                         st.subheader("Detailed Predictions")
