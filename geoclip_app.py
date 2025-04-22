@@ -313,7 +313,7 @@ def main():
         """)
 
 if __name__ == "__main__":
-    # streamlit run geoclip_app.py --server.port 10000 --server.headless true
+    # streamlit run geoclip_app.py --server.port 10000 --server.headless true --browser.gatherUsageStats false
     try:
         main()
     except Exception as e:
