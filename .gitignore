@@ -176,3 +176,4 @@ cython_debug/
 .tags*
 .DS_Store
 stream
+.streamlit
