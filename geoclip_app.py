@@ -5,6 +5,8 @@ import types
 import tempfile
 import time
 import traceback
+import hmac
+import base64
 
 import torch
 import numpy as np
@@ -30,6 +32,37 @@ st.set_page_config(
     page_icon="🌍",
     layout="wide"
 )
+
+# Add these authentication functions after the imports and before the page config
+def check_password():
+    """Returns `True` if the user had the correct password."""
+
+    def password_entered():
+        """Checks whether a password entered by the user is correct."""
+        if hmac.compare_digest(st.session_state["password"], st.secrets["password"]):
+            st.session_state["password_correct"] = True
+            del st.session_state["password"]  # Don't store the password
+        else:
+            st.session_state["password_correct"] = False
+
+    # Return True if the password is validated
+    if st.session_state.get("password_correct", False):
+        return True
+
+    # Show input for password
+    st.title("🔒 GeoCLIP Location Predictor")
+    st.write("Please enter the password to access this app")
+
+    # Create password field and check button
+    st.text_input(
+        "Password", type="password", on_change=password_entered, key="password"
+    )
+
+    if "password_correct" in st.session_state:
+        if not st.session_state["password_correct"]:
+            st.error("😕 Incorrect password. Please try again.")
+
+    return False
 
 # Cache the model to avoid reloading it for each prediction
 @st.cache_resource
@@ -187,6 +220,10 @@ def convert_image(uploaded_file):
         return tmp_file.name
 
 def main():
+    # Check for authentication first
+    if not check_password():
+        return
+
     st.title("📍 GeoCLIP Location Predictor")
     st.write("Upload an image to predict its geographical location using GeoCLIP")
 
