@@ -215,7 +215,7 @@ def process_images(args) -> Dict[str, Tuple[str, str]]:
         # Remove mkldnn-related parameters that are causing errors
         cpu_threads=args.cpu_threads,  # Control CPU threads
         rec_batch_num=1,  # Process images one by one
-        max_text_length=50,  # Limit max text length to reduce memory usage
+        max_text_length=100,  # Limit max text length to reduce memory usage
         det_db_box_thresh=args.confidence_threshold,  # Detection threshold
         use_space_char=True,  # Important for Japanese text
     )
@@ -339,9 +339,9 @@ def main():
     parser.add_argument("--image_dir", required=True, help="Directory containing images to process")
     parser.add_argument("--google_credentials", required=True, help="Path to Google Cloud credentials JSON file")
     parser.add_argument("--output_dir", default="output", help="Directory for output files (default: 'output')")
-    parser.add_argument("--batch_size", type=int, default=3, help="Number of images to process before writing results (default: 3)")
+    parser.add_argument("--batch_size", type=int, default=1, help="Number of images to process before writing results (default: 1)")
     parser.add_argument("--max_image_size", type=int, default=1200, help="Maximum dimension for image preprocessing (default: 1200)")
-    parser.add_argument("--cpu_threads", type=int, default=2, help="Number of CPU threads to use (default: 2)")
+    parser.add_argument("--cpu_threads", type=int, default=10, help="Number of CPU threads to use (default: 10)")
     parser.add_argument("--confidence_threshold", type=float, default=0.5, help="Confidence threshold for text detection (default: 0.5)")
     args = parser.parse_args()
 
