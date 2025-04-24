@@ -52,7 +52,7 @@ def check_password():
     if login_button:
         if hmac.compare_digest(password, st.secrets["password"]):
             st.session_state["password_correct"] = True
-            # No rerun needed, just return True and let the app continue
+            st.rerun()
             return True
         else:
             st.error("😕 Incorrect password. Please try again.")
