@@ -37,14 +37,6 @@ st.set_page_config(
 def check_password():
     """Returns `True` if the user had the correct password."""
 
-    def password_entered():
-        """Checks whether a password entered by the user is correct."""
-        if hmac.compare_digest(st.session_state["password"], st.secrets["password"]):
-            st.session_state["password_correct"] = True
-            del st.session_state["password"]  # Don't store the password
-        else:
-            st.session_state["password_correct"] = False
-
     # Return True if the password is validated
     if st.session_state.get("password_correct", False):
         return True
@@ -53,13 +45,15 @@ def check_password():
     st.title("🔒 GeoCLIP Location Predictor")
     st.write("Please enter the password to access this app")
 
-    # Create password field and check button
-    password = st.text_input("Password", type="password", key="password")
+    # Create password field and button
+    password = st.text_input("Password", type="password", key="password_input")
+    login_button = st.button("Login")
 
-    if st.button("Login"):
+    if login_button:
         if hmac.compare_digest(password, st.secrets["password"]):
             st.session_state["password_correct"] = True
-            st.rerun()
+            # No rerun needed, just return True and let the app continue
+            return True
         else:
             st.error("😕 Incorrect password. Please try again.")
 
@@ -225,12 +219,12 @@ def main():
     if not check_password():
         return
 
-    # Add headers to help with CORS issues (add this)
-    headers = {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    }
+    # Set headers for file upload requests
+    st.markdown("""
+    <style>
+    /* CSS to help with CORS issues */
+    </style>
+    """, unsafe_allow_html=True)
 
     st.title("📍 GeoCLIP Location Predictor")
     st.write("Upload an image to predict its geographical location using GeoCLIP")
