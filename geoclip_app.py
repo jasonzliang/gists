@@ -54,12 +54,13 @@ def check_password():
     st.write("Please enter the password to access this app")
 
     # Create password field and check button
-    st.text_input(
-        "Password", type="password", on_change=password_entered, key="password"
-    )
+    password = st.text_input("Password", type="password", key="password")
 
-    if "password_correct" in st.session_state:
-        if not st.session_state["password_correct"]:
+    if st.button("Login"):
+        if hmac.compare_digest(password, st.secrets["password"]):
+            st.session_state["password_correct"] = True
+            st.experimental_rerun()
+        else:
             st.error("😕 Incorrect password. Please try again.")
 
     return False
@@ -223,6 +224,13 @@ def main():
     # Check for authentication first
     if not check_password():
         return
+
+    # Add headers to help with CORS issues (add this)
+    headers = {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    }
 
     st.title("📍 GeoCLIP Location Predictor")
     st.write("Upload an image to predict its geographical location using GeoCLIP")
