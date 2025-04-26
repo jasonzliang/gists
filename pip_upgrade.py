@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-Script to update all packages to versions that minimize dependency conflicts using pip-tools
+Alternative script to update packages using a different strategy.
+This version checks for updates individually and uses batch updates for related packages.
 """
 
 import subprocess
@@ -8,7 +9,8 @@ import sys
 import os
 import logging
 import json
-from pathlib import Path
+import tempfile
+from collections import defaultdict
 
 logging.basicConfig(
     level=logging.INFO,
@@ -45,200 +47,180 @@ def get_current_packages():
     stdout, _, _ = run_command("pip list --format=json")
     return json.loads(stdout)
 
-def generate_requirements_in():
-    """Generate requirements.in from current environment without version constraints."""
-    logging.info("Generating requirements.in from current environment...")
-    
-    packages = get_current_packages()
-    
-    # Create requirements.in with just package names (no versions)
-    # This allows pip-compile to find the best compatible versions
-    with open('requirements.in', 'w') as f:
-        for package in packages:
-            name = package['name']
-            # Skip packages that shouldn't be in requirements
-            if name not in ['pip', 'setuptools', 'wheel', 'pip-tools']:
-                f.write(f"{name}\n")
-    
-    logging.info(f"Created requirements.in with {len(packages)} packages")
+def get_outdated_packages():
+    """Get list of outdated packages."""
+    stdout, _, returncode = run_command("pip list --outdated --format=json", check=False)
+    if returncode == 0 and stdout:
+        return json.loads(stdout)
+    return []
 
-def resolve_with_minimal_conflicts():
-    """Resolve dependencies to minimize conflicts while updating packages."""
-    logging.info("="*60)
-    logging.info("Starting dependency resolution to minimize conflicts")
-    logging.info("="*60)
+def check_package_updates():
+    """Check which packages have available updates."""
+    logging.info("Checking for package updates...")
     
-    # First attempt: Try to upgrade everything to latest compatible versions
-    logging.info("\nPhase 1: Attempting full upgrade of all packages...")
-    logging.info("Running: pip-compile --upgrade --resolver=backtracking requirements.in")
-    stdout, stderr, returncode = run_command(
-        "pip-compile --upgrade --resolver=backtracking requirements.in", 
-        check=False
-    )
+    outdated = get_outdated_packages()
+    if not outdated:
+        logging.info("All packages are up to date!")
+        return [], []
     
-    if returncode == 0:
-        logging.info("✓ Successfully resolved all dependencies with latest versions!")
-        return True
+    logging.info(f"Found {len(outdated)} packages with available updates:")
+    for pkg in outdated:
+        logging.info(f"  • {pkg['name']}: {pkg['version']} -> {pkg['latest_version']}")
     
-    # If that fails, try a more conservative approach
-    logging.info("\nPhase 2: Full upgrade failed, starting incremental approach...")
-    logging.info("This will attempt to upgrade packages one by one...")
+    return outdated, get_current_packages()
+
+def try_update_package(package_name, current_version, latest_version, constraints_content=None):
+    """Try to update a single package."""
+    logging.info(f"Testing update of {package_name} from {current_version} to {latest_version}")
     
-    # Get current packages with versions
-    current_packages = get_current_packages()
+    # Create a requirements content for this test
+    requirements_content = f"{package_name}>={latest_version}\n"
     
-    # Create a constraints file with current versions
-    with open('constraints.txt', 'w') as f:
-        for package in current_packages:
-            f.write(f"{package['name']}=={package['version']}\n")
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.in', delete=False) as req_file:
+        req_file.write(requirements_content)
+        req_file.flush()
+        
+        try:
+            if constraints_content:
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as constraints_file:
+                    constraints_file.write(constraints_content)
+                    constraints_file.flush()
+                    
+                    cmd = f"pip-compile --constraint {constraints_file.name} --resolver=backtracking {req_file.name}"
+                    stdout, stderr, returncode = run_command(cmd, check=False)
+                    os.unlink(constraints_file.name)
+            else:
+                cmd = f"pip-compile --resolver=backtracking {req_file.name}"
+                stdout, stderr, returncode = run_command(cmd, check=False)
+            
+            # Clean up
+            output_file = req_file.name.replace('.in', '.txt')
+            if os.path.exists(output_file):
+                os.unlink(output_file)
+            os.unlink(req_file.name)
+            
+            return returncode == 0, stderr
+        except Exception as e:
+            if os.path.exists(req_file.name):
+                os.unlink(req_file.name)
+            logging.error(f"Error testing update for {package_name}: {e}")
+            return False, str(e)
+
+def update_packages_strategically():
+    """Update packages using a strategic approach."""
+    outdated_packages, current_packages = check_package_updates()
     
-    # Try to upgrade packages one by one
-    problematic_packages = []
-    updated_packages = []
+    if not outdated_packages:
+        return True, []
     
-    # Filter out packages we don't want to upgrade
-    packages_to_process = [pkg for pkg in current_packages 
-                          if pkg['name'] not in ['pip', 'setuptools', 'wheel', 'pip-tools']]
+    # Group packages by their update potential
+    easy_updates = []
+    difficult_updates = []
     
-    total_packages = len(packages_to_process)
+    # First, try to update each package individually
+    logging.info("\nTesting individual package updates...")
     
-    for i, package in enumerate(packages_to_process, 1):
+    for package in outdated_packages:
         name = package['name']
-        progress = f"[{i}/{total_packages}]"
-        logging.info(f"{progress} Attempting to upgrade {name}...")
+        current_version = package['version']
+        latest_version = package['latest_version']
         
-        # Remove the constraint for this package
-        temp_constraints = []
-        with open('constraints.txt', 'r') as f:
-            for line in f:
-                if not line.startswith(f"{name}=="):
-                    temp_constraints.append(line)
+        success, error = try_update_package(name, current_version, latest_version)
         
-        with open('constraints.txt', 'w') as f:
-            f.writelines(temp_constraints)
-        
-        # Try to compile with this package unconstrained
-        _, _, returncode = run_command(
-            f"pip-compile --constraint constraints.txt --upgrade-package {name} requirements.in",
-            check=False
-        )
-        
-        if returncode == 0:
-            updated_packages.append(name)
-            logging.info(f"{progress} ✓ Successfully found compatible upgrade for {name}")
+        if success:
+            easy_updates.append(package)
+            logging.info(f"✓ {name} can be upgraded to {latest_version}")
         else:
-            problematic_packages.append(name)
-            logging.warning(f"{progress} ✗ Could not find compatible upgrade for {name}")
-            # Restore the constraint
-            with open('constraints.txt', 'a') as f:
-                f.write(f"{name}=={package['version']}\n")
-        
-        # Show running totals
-        successful = len(updated_packages)
-        failed = len(problematic_packages)
-        logging.info(f"{progress} Running total: {successful} upgraded, {failed} failed")
+            difficult_updates.append(package)
+            logging.warning(f"✗ {name} cannot be upgraded due to conflicts")
+            if error:
+                logging.debug(f"  Error: {error[:200]}...")
     
-    # Final compilation with all successful upgrades
-    logging.info("\nPhase 3: Performing final compilation with compatible upgrades...")
-    stdout, stderr, returncode = run_command(
-        "pip-compile --constraint constraints.txt requirements.in",
-        check=False
-    )
-    
-    if returncode == 0:
-        logging.info("\n" + "="*60)
-        logging.info("SUMMARY")
-        logging.info("="*60)
-        logging.info(f"✓ Successfully updated {len(updated_packages)} packages")
+    # Create a requirements content with all easy updates
+    if easy_updates:
+        logging.info(f"\nApplying {len(easy_updates)} easy updates...")
+        requirements_content = []
         
-        if updated_packages:
-            logging.info("\nPackages upgraded:")
-            for pkg in updated_packages:
-                logging.info(f"  • {pkg}")
+        # Get all current packages
+        for pkg in current_packages:
+            if pkg['name'] in [p['name'] for p in easy_updates]:
+                # For packages that can be updated, specify the new version
+                package_info = next(p for p in easy_updates if p['name'] == pkg['name'])
+                requirements_content.append(f"{pkg['name']}=={package_info['latest_version']}\n")
+            else:
+                # For other packages, keep the current version
+                requirements_content.append(f"{pkg['name']}=={pkg['version']}\n")
         
-        if problematic_packages:
-            logging.info(f"\n✗ Could not update {len(problematic_packages)} packages due to conflicts:")
-            for pkg in problematic_packages:
-                logging.info(f"  • {pkg}")
+        requirements_text = ''.join(requirements_content)
         
-        logging.info("="*60)
-        return True
+        # Write to temporary file and compile
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.in', delete=False) as req_file:
+            req_file.write(requirements_text)
+            req_file.flush()
+            
+            cmd = f"pip-compile --resolver=backtracking {req_file.name}"
+            stdout, stderr, returncode = run_command(cmd, check=False)
+            
+            output_file = req_file.name.replace('.in', '.txt')
+            if os.path.exists(output_file) and returncode == 0:
+                with open(output_file, 'r') as f:
+                    output_content = f.read()
+                
+                # Clean up
+                os.unlink(output_file)
+                os.unlink(req_file.name)
+                
+                return True, output_content
+            else:
+                # Clean up
+                if os.path.exists(output_file):
+                    os.unlink(output_file)
+                os.unlink(req_file.name)
+                logging.error("Failed to compile requirements with easy updates")
+                return False, None
     else:
-        logging.error("\nFailed to find a compatible set of package versions")
-        return False
-
-def sync_environment():
-    """Sync environment with resolved dependencies."""
-    logging.info("\n" + "="*60)
-    logging.info("Syncing environment with resolved dependencies...")
-    logging.info("="*60)
-    logging.info("Running: pip-sync requirements.txt")
-    logging.info("This may take a few minutes...\n")
-    
-    stdout, stderr, returncode = run_command("pip-sync requirements.txt")
-    
-    if returncode == 0:
-        logging.info("✓ Successfully synced environment")
-        return True
-    else:
-        logging.error("✗ Failed to sync environment")
-        return False
-
-def check_final_state():
-    """Verify the final state has no conflicts."""
-    logging.info("Checking final state for conflicts...")
-    
-    # Check with pip check
-    stdout, stderr, returncode = run_command("pip check", check=False)
-    
-    if returncode == 0:
-        logging.info("No dependency conflicts found!")
-    else:
-        logging.warning("Some dependency issues remain:")
-        if stdout:
-            logging.warning(stdout)
-    
-    # Show what was upgraded
-    if os.path.exists('requirements.txt'):
-        logging.info("Comparing old and new versions...")
-        old_packages = get_current_packages()
-        new_packages = {}
-        
-        with open('requirements.txt', 'r') as f:
-            for line in f:
-                if '==' in line and not line.startswith('#'):
-                    name, version = line.strip().split('==')
-                    new_packages[name] = version
-        
-        upgraded = []
-        for old_pkg in old_packages:
-            name = old_pkg['name']
-            if name in new_packages and old_pkg['version'] != new_packages[name]:
-                upgraded.append(f"{name}: {old_pkg['version']} -> {new_packages[name]}")
-        
-        if upgraded:
-            logging.info("Upgraded packages:")
-            for pkg in upgraded:
-                logging.info(f"  {pkg}")
+        logging.error("No packages could be updated due to conflicts")
+        return False, None
 
 def main():
-    """Main function to update packages while minimizing conflicts."""
+    """Main function."""
+    # Enable DEBUG logging if needed
+    if '--debug' in sys.argv:
+        logging.getLogger().setLevel(logging.DEBUG)
+    
     ensure_pip_tools()
     
-    # Generate requirements.in without version constraints
-    generate_requirements_in()
+    success, output_content = update_packages_strategically()
     
-    # Resolve dependencies to minimize conflicts
-    if resolve_with_minimal_conflicts():
-        # Sync the environment
-        sync_environment()
-        
-        # Check the final state
-        check_final_state()
-        
-        logging.info("Update complete! Dependencies have been updated to minimize conflicts.")
+    if success and output_content:
+        # Apply the updates using pip-sync
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as temp_req:
+            temp_req.write(output_content)
+            temp_req.flush()
+            
+            try:
+                logging.info("\nApplying updates...")
+                stdout, stderr, returncode = run_command(f"pip-sync {temp_req.name}")
+                
+                if returncode == 0:
+                    logging.info("✓ Successfully updated packages")
+                    
+                    # Check the final state
+                    logging.info("\nChecking final state...")
+                    stdout, stderr, returncode = run_command("pip check", check=False)
+                    
+                    if returncode == 0:
+                        logging.info("No dependency conflicts found!")
+                    else:
+                        logging.warning("Some dependency issues remain:")
+                        if stdout:
+                            logging.warning(stdout)
+                else:
+                    logging.error("Failed to apply updates")
+            finally:
+                os.unlink(temp_req.name)
     else:
-        logging.error("Failed to resolve dependencies while minimizing conflicts.")
+        logging.error("Failed to find compatible updates")
         sys.exit(1)
 
 if __name__ == "__main__":
