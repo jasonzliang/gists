@@ -199,8 +199,8 @@ def process_images(args) -> Dict[str, Tuple[str, str]]:
     os.environ['FLAGS_use_cuda'] = '0'  # Disable CUDA
     os.environ['FLAGS_selected_gpus'] = '-1'  # No GPU selection
     os.environ['FLAGS_fraction_of_gpu_memory_to_use'] = '0'  # No GPU memory
-    os.environ['FLAGS_eager_delete_tensor_gb'] = '0.0'  # Help with memory management
-    os.environ['FLAGS_allocator_strategy'] = 'naive_best_fit'  # Use simpler allocator
+    # os.environ['FLAGS_eager_delete_tensor_gb'] = '0.0'  # Help with memory management
+    # os.environ['FLAGS_allocator_strategy'] = 'naive_best_fit'  # Use simpler allocator
 
     # Try to enable the Paddle CPU backend properly
     os.environ['FLAGS_use_mkldnn'] = '0'  # Disable MKL-DNN since it's causing issues
@@ -311,7 +311,7 @@ def write_output_files(results: Dict[str, Tuple[str, str]], output_dir: str, ima
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     # Write Japanese output (append mode)
-    with open(japanese_output_path, 'a', encoding='utf-8') as jp_file:
+    with open(japanese_output_path, 'a') as jp_file:
         jp_file.write(f"\n\n===== RUN: {timestamp} =====\n\n")
         if not results:
             jp_file.write("No results to write.\n")
@@ -321,7 +321,7 @@ def write_output_files(results: Dict[str, Tuple[str, str]], output_dir: str, ima
                 jp_file.write(japanese_text if japanese_text else "[No text detected]" + "\n\n")
 
     # Write English output (append mode)
-    with open(english_output_path, 'a', encoding='utf-8') as en_file:
+    with open(english_output_path, 'a') as en_file:
         en_file.write(f"\n\n===== RUN: {timestamp} =====\n\n")
         if not results:
             en_file.write("No results to write.\n")
@@ -373,13 +373,6 @@ def main():
     logger.addHandler(file_handler)
 
     try:
-        # Ensure CPU-only operation before any PaddlePaddle imports
-        os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
-        os.environ['FLAGS_use_cuda'] = '0'
-        os.environ['FLAGS_selected_gpus'] = '-1'
-        os.environ['FLAGS_use_mkldnn'] = '0'  # Disable MKLDNN since it's causing compatibility issues
-        os.environ['FLAGS_allocator_strategy'] = 'naive_best_fit'
-
         # Process the images
         logger.info("Starting image processing in CPU-only mode...")
         logger.info(f"Using batch size: {args.batch_size}, CPU threads: {args.cpu_threads}, Max image size: {args.max_image_size}")
