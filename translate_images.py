@@ -169,7 +169,7 @@ def extract_text_from_image(ocr, image_path: str, conf_thres: float) -> str:
         # Clean up memory explicitly
         del result
 
-        return "".join(text_lines)
+        return " ".join(text_lines)
     except Exception as e:
         logger.error(f"Error extracting text from {image_path}: {e}")
         import traceback
