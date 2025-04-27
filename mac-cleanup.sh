@@ -15,33 +15,33 @@ bytesToHuman() {
 
 # Check if Time Machine is running
 if [ `tmutil status | grep -c "Running = 1"` -ne 0 ]; then
-	echo "Time Machine is currently running. Let it finish first!"
-	exit
+    echo "Time Machine is currently running. Let it finish first!"
+    exit
 fi
 
 # Check for last Time Machine backup and exit if it's longer than 1 hour ago
 lastBackupDateString=`tmutil latestbackup | grep -E -o "[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{6}"`
 if [ "$lastBackupDateString" == "" ]; then
-	read -n 1 -p "$(tput setaf 3)Last Time Machine backup cannot be found. Proceed anyway?$(tput sgr0) (y/n) " RESP
+    read -n 1 -p "$(tput setaf 3)Last Time Machine backup cannot be found. Proceed anyway?$(tput sgr0) (y/n) " RESP
     echo ""
-	if [ "$RESP" != "y" ]; then
-		exit
-	fi
+    if [ "$RESP" != "y" ]; then
+        exit
+    fi
 else
-	lastBackupDate=`date -j -f "%Y-%m-%d-%H%M%S" $lastBackupDateString "+%s"`
-	if [ $((`date +%s` - $lastBackupDate)) -gt 3600 ]
-	then
-		printf "Time Machine has not backed up since `date -j -f %s $lastBackupDate` (more than 60 minutes)!"
-		exit 1003
-	else
-		echo "Last Time Machine backup was on `date -j -f %s $lastBackupDate`. "
-	fi
+    lastBackupDate=`date -j -f "%Y-%m-%d-%H%M%S" $lastBackupDateString "+%s"`
+    if [ $((`date +%s` - $lastBackupDate)) -gt 3600 ]
+    then
+        printf "Time Machine has not backed up since `date -j -f %s $lastBackupDate` (more than 60 minutes)!"
+        exit 1003
+    else
+        echo "Last Time Machine backup was on `date -j -f %s $lastBackupDate`. "
+    fi
 fi
 
 # Ask for the administrator password upfront
 if [ "$EUID" -ne 0  ]; then
-	echo "Please run as root"
-	exit
+    echo "Please run as root"
+    exit
 fi
 
 oldAvailable=$(df / | tail -1 | awk '{print $4}')
@@ -81,7 +81,7 @@ sudo -S rm -rf ~/Library/Caches/*
 echo 'Clean Application Caches...'
 for x in $(ls ~/Library/Containers/)
 do
-	rm -rfv ~/Library/Containers/$x/Data/Library/Caches/*
+    rm -rfv ~/Library/Containers/$x/Data/Library/Caches/*
 done
 
 echo 'Clear Adobe Cache Files...'
