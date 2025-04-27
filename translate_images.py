@@ -317,6 +317,7 @@ def process_images(args) -> Dict[str, Tuple[str, str]]:
     else:  # huggingface
         # Import HuggingFace transformers
         try:
+            import torch
             from transformers import pipeline
         except ImportError:
             logger.error("Transformers not found. Installing...")
@@ -324,7 +325,20 @@ def process_images(args) -> Dict[str, Tuple[str, str]]:
             from transformers import pipeline
 
         logger.info("Initializing HuggingFace translation model...")
-        translator = pipeline("translation", model="Helsinki-NLP/opus-mt-ja-en")
+
+        # Check if MPS is available
+        if torch.backends.mps.is_available():
+            device = torch.device("mps")
+        else:
+            device = torch.device("cpu")
+
+        translator = pipeline(
+            "translation",
+            model="thefrigidliquidation/nllb-jaen-1.3B-lightnovels",
+            src_lang="jpn_Jpan",  # Japanese
+            tgt_lang="eng_Latn",   # English
+            device=device
+        )
 
     # Initialize translation cache
     cache_dir = os.path.join(args.output_dir, 'cache')
