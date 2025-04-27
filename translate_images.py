@@ -6,7 +6,8 @@ Japanese Image OCR and Translation Tool - CPU Version
 This script processes a directory of images containing Japanese text:
 1. Uses PaddleOCR to extract Japanese text from images (CPU only)
 2. Translates the text to English using Google Translate API
-3. Outputs two text files:
+3. Caches translated text for each image to avoid duplicate translations
+4. Outputs two text files with timestamps:
    - japanese_output.txt: Original Japanese text from each image
    - english_output.txt: Translated English text from each image
 
@@ -27,12 +28,11 @@ from typing import Dict, List, Tuple
 import logging
 import time
 import gc
+import json
+import datetime
+import hashlib
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
+# Setup logger (will be configured in main)
 logger = logging.getLogger(__name__)
 
 # Import PaddleOCR
@@ -58,6 +58,53 @@ except ImportError:
     logger.error("PIL not found. Installing...")
     os.system("pip install pillow")
     from PIL import Image
+
+
+class TranslationCache:
+    """Simple cache for storing translated text to avoid duplicate API calls."""
+
+    def __init__(self, cache_dir):
+        self.cache_dir = cache_dir
+        self.cache_file = os.path.join(cache_dir, "translation_cache.json")
+        self.cache = {}
+        self._load_cache()
+
+    def _load_cache(self):
+        """Load existing cache from file."""
+        os.makedirs(self.cache_dir, exist_ok=True)
+        if os.path.exists(self.cache_file):
+            try:
+                with open(self.cache_file, 'r', encoding='utf-8') as f:
+                    self.cache = json.load(f)
+                logger.info(f"Loaded {len(self.cache)} cached translations")
+            except Exception as e:
+                logger.warning(f"Error loading cache: {e}. Starting with empty cache.")
+                self.cache = {}
+
+    def _save_cache(self):
+        """Save cache to file."""
+        try:
+            with open(self.cache_file, 'w', encoding='utf-8') as f:
+                json.dump(self.cache, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            logger.error(f"Error saving cache: {e}")
+
+    def get_cache_key(self, image_name: str, japanese_text: str) -> str:
+        """Generate a unique cache key for the image and text."""
+        # Use both image name and text hash to handle cases where same image might have different text
+        text_hash = hashlib.md5(japanese_text.encode('utf-8')).hexdigest()
+        return f"{image_name}:{text_hash}"
+
+    def get(self, image_name: str, japanese_text: str) -> str:
+        """Get cached translation if available."""
+        key = self.get_cache_key(image_name, japanese_text)
+        return self.cache.get(key)
+
+    def set(self, image_name: str, japanese_text: str, english_text: str):
+        """Store translation in cache."""
+        key = self.get_cache_key(image_name, japanese_text)
+        self.cache[key] = english_text
+        self._save_cache()
 
 
 def is_valid_image(file_path: str) -> bool:
@@ -148,6 +195,7 @@ def translate_text(translate_client, text: str, target_language: str = 'en', sou
         logger.error(f"Translation error: {e}")
         return f"[Translation error: {e}]"
 
+
 def preprocess_image(image_path, max_size=1600):
     """
     Preprocess image to reduce its size if it's too large.
@@ -192,6 +240,7 @@ def preprocess_image(image_path, max_size=1600):
         logger.warning(f"Error preprocessing image {image_path}: {e}. Using original image.")
         return image_path
 
+
 def process_images(args) -> Dict[str, Tuple[str, str]]:
     """Process all images in the directory."""
     # Set environment variables to ensure CPU-only operation and proper configuration
@@ -199,8 +248,6 @@ def process_images(args) -> Dict[str, Tuple[str, str]]:
     os.environ['FLAGS_use_cuda'] = '0'  # Disable CUDA
     os.environ['FLAGS_selected_gpus'] = '-1'  # No GPU selection
     os.environ['FLAGS_fraction_of_gpu_memory_to_use'] = '0'  # No GPU memory
-    # os.environ['FLAGS_eager_delete_tensor_gb'] = '0.0'  # Help with memory management
-    # os.environ['FLAGS_allocator_strategy'] = 'naive_best_fit'  # Use simpler allocator
 
     # Try to enable the Paddle CPU backend properly
     os.environ['FLAGS_use_mkldnn'] = '0'  # Disable MKL-DNN since it's causing issues
@@ -212,7 +259,6 @@ def process_images(args) -> Dict[str, Tuple[str, str]]:
         use_angle_cls=True,
         lang='japan',
         use_gpu=False,  # Explicitly set to use CPU
-        # Remove mkldnn-related parameters that are causing errors
         cpu_threads=args.cpu_threads,  # Control CPU threads
         rec_batch_num=1,  # Process images one by one
         max_text_length=100,  # Limit max text length to reduce memory usage
@@ -224,6 +270,10 @@ def process_images(args) -> Dict[str, Tuple[str, str]]:
     logger.info("Initializing Google Translate API...")
     os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = args.google_credentials
     translate_client = translate.Client()
+
+    # Initialize translation cache
+    cache_dir = os.path.join(args.output_dir, 'cache')
+    translation_cache = TranslationCache(cache_dir)
 
     # Get all image files
     logger.info(f"Scanning directory: {args.image_dir}")
@@ -265,8 +315,17 @@ def process_images(args) -> Dict[str, Tuple[str, str]]:
                 # Translate to English if we got text
                 english_text = ""
                 if japanese_text:
-                    logger.info(f"Translating text from {image_name}")
-                    english_text = translate_text(translate_client, japanese_text, target_language='en', source_language='ja')
+                    # Check cache first
+                    cached_translation = translation_cache.get(image_name, japanese_text)
+                    if cached_translation:
+                        english_text = cached_translation
+                        logger.info(f"Using cached translation for {image_name}")
+                    else:
+                        logger.info(f"Translating text from {image_name}")
+                        english_text = translate_text(translate_client, japanese_text, target_language='en', source_language='ja')
+                        # Cache the translation
+                        if english_text and not english_text.startswith("[Translation error"):
+                            translation_cache.set(image_name, japanese_text, english_text)
                 else:
                     logger.warning(f"No text extracted from {image_name}")
 
@@ -297,22 +356,25 @@ def process_images(args) -> Dict[str, Tuple[str, str]]:
 
 
 def write_output_files(results: Dict[str, Tuple[str, str]], output_dir: str, image_dir: str):
-    """Write the results to output files."""
+    """Write the results to output files with current timestamp."""
     # Ensure output directory exists
     os.makedirs(output_dir, exist_ok=True)
 
-    # Use the input directory name for the output files
+    # Use the input directory name for the output files and replace spaces with underscores
     dir_name = os.path.basename(os.path.normpath(image_dir))
-    japanese_output_path = os.path.join(output_dir, f"{dir_name}_japanese.txt")
-    english_output_path = os.path.join(output_dir, f"{dir_name}_english.txt")
+    dir_name = dir_name.replace(' ', '_')  # Replace spaces with underscores
+
+    # Add timestamp to the filename
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    japanese_output_path = os.path.join(output_dir, f"{dir_name}_japanese_{timestamp}.txt")
+    english_output_path = os.path.join(output_dir, f"{dir_name}_english_{timestamp}.txt")
 
     # Add timestamp to help differentiate between runs
-    import datetime
-    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    run_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    # Write Japanese output (append mode)
-    with open(japanese_output_path, 'a') as jp_file:
-        jp_file.write(f"\n\n===== RUN: {timestamp} =====\n\n")
+    # Write Japanese output (write mode, creates new file with timestamp)
+    with open(japanese_output_path, 'w', encoding='utf-8') as jp_file:
+        jp_file.write(f"===== RUN: {run_timestamp} =====\n\n")
         if not results:
             jp_file.write("No results to write.\n")
         else:
@@ -320,9 +382,9 @@ def write_output_files(results: Dict[str, Tuple[str, str]], output_dir: str, ima
                 jp_file.write(f"===== {image_name} =====\n")
                 jp_file.write(japanese_text if japanese_text else "[No text detected]" + "\n\n")
 
-    # Write English output (append mode)
-    with open(english_output_path, 'a') as en_file:
-        en_file.write(f"\n\n===== RUN: {timestamp} =====\n\n")
+    # Write English output (write mode, creates new file with timestamp)
+    with open(english_output_path, 'w', encoding='utf-8') as en_file:
+        en_file.write(f"===== RUN: {run_timestamp} =====\n\n")
         if not results:
             en_file.write("No results to write.\n")
         else:
@@ -330,7 +392,7 @@ def write_output_files(results: Dict[str, Tuple[str, str]], output_dir: str, ima
                 en_file.write(f"===== {image_name} =====\n")
                 en_file.write(english_text if english_text else "[No translation available]" + "\n\n")
 
-    logger.info(f"Output appended to {japanese_output_path} and {english_output_path}")
+    logger.info(f"Output written to {japanese_output_path} and {english_output_path}")
 
 
 def main():
@@ -343,7 +405,28 @@ def main():
     parser.add_argument("--max_image_size", type=int, default=1200, help="Maximum dimension for image preprocessing (default: 1200)")
     parser.add_argument("--cpu_threads", type=int, default=10, help="Number of CPU threads to use (default: 10)")
     parser.add_argument("--confidence_threshold", type=float, default=0.5, help="Confidence threshold for text detection (default: 0.5)")
+    parser.add_argument("--log_level", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+                       help="Set the logging level (default: INFO)")
     args = parser.parse_args()
+
+    # Set logging level based on argument
+    numeric_level = getattr(logging, args.log_level.upper(), None)
+    if numeric_level is None:
+        raise ValueError(f"Invalid log level: {args.log_level}")
+    logger.setLevel(numeric_level)
+
+    # Update all handlers with new level
+    for handler in logger.handlers:
+        handler.setLevel(numeric_level)
+
+    # Configure logging with the specified level
+    logging.basicConfig(
+        level=numeric_level,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.StreamHandler()  # This ensures output to stdout
+        ]
+    )
 
     # Check if the image directory exists
     if not os.path.isdir(args.image_dir):
@@ -364,11 +447,12 @@ def main():
         logger.error(f"Error reading Google credentials file: {e}")
         return
 
-    # Configure logging to file as well
+    # Configure logging to file as well (in addition to stdout)
     log_dir = os.path.join(args.output_dir, "logs")
     os.makedirs(log_dir, exist_ok=True)
     log_file = os.path.join(log_dir, f"ocr_translation_{time.strftime('%Y%m%d_%H%M%S')}.log")
     file_handler = logging.FileHandler(log_file)
+    file_handler.setLevel(numeric_level)  # Use the same level for file handler
     file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
     logger.addHandler(file_handler)
 
