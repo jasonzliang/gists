@@ -397,16 +397,25 @@ def write_output_files(results: Dict[str, Tuple[str, str]], output_dir: str, ima
 
 def main():
     """Main function to run the script."""
-    parser = argparse.ArgumentParser(description="Process images with Japanese text using PaddleOCR and translate to English")
-    parser.add_argument("--image_dir", required=True, help="Directory containing images to process")
-    parser.add_argument("--google_credentials", required=True, help="Path to Google Cloud credentials JSON file")
-    parser.add_argument("--output_dir", default="output", help="Directory for output files (default: 'output')")
-    parser.add_argument("--batch_size", type=int, default=1, help="Number of images to process before writing results (default: 1)")
-    parser.add_argument("--max_image_size", type=int, default=1200, help="Maximum dimension for image preprocessing (default: 1200)")
-    parser.add_argument("--cpu_threads", type=int, default=10, help="Number of CPU threads to use (default: 10)")
-    parser.add_argument("--confidence_threshold", type=float, default=0.5, help="Confidence threshold for text detection (default: 0.5)")
-    parser.add_argument("--log_level", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
-                       help="Set the logging level (default: INFO)")
+    parser = argparse.ArgumentParser(
+        description="Process images with Japanese text using PaddleOCR and translate to English")
+    parser.add_argument("--image_dir", required=True,
+        help="Directory containing images to process")
+    parser.add_argument("--google_credentials", required=True,
+        help="Path to Google Cloud credentials JSON file")
+    parser.add_argument("--output_dir", default="output",
+        help="Directory for output files (default: 'output')")
+    parser.add_argument("--batch_size", type=int, default=1,
+        help="Number of images to process before writing results (default: 1)")
+    parser.add_argument("--max_image_size", type=int, default=1200,
+        help="Maximum dimension for image preprocessing (default: 1200)")
+    parser.add_argument("--cpu_threads", type=int, default=10,
+        help="Number of CPU threads to use (default: 10)")
+    parser.add_argument("--confidence_threshold", type=float, default=0.5,
+        help="Confidence threshold for text detection (default: 0.5)")
+    parser.add_argument("--log_level", default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        help="Set the logging level (default: INFO)")
     args = parser.parse_args()
 
     # Set logging level based on argument
