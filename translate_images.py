@@ -139,7 +139,7 @@ def get_image_files(directory: str) -> List[str]:
     return sorted(image_files)
 
 
-def extract_text_from_image(ocr, image_path: str) -> str:
+def extract_text_from_image(ocr, image_path: str, conf_thres: float) -> str:
     """Extract text from an image using PaddleOCR."""
     try:
         # Set lower threshold to detect more text
@@ -163,13 +163,13 @@ def extract_text_from_image(ocr, image_path: str) -> str:
                     confidence = line[1][1]  # Get confidence score
 
                     # Only add text with confidence above threshold
-                    if text and text.strip() and confidence > args.confidence_threshold:
+                    if text and text.strip() and confidence > conf_thres:
                         text_lines.append(text)
 
         # Clean up memory explicitly
         del result
 
-        return "\n".join(text_lines)
+        return "".join(text_lines)
     except Exception as e:
         logger.error(f"Error extracting text from {image_path}: {e}")
         import traceback
@@ -371,7 +371,7 @@ def process_images(args) -> Dict[str, Tuple[str, str]]:
                 preprocessed_path = preprocess_image(image_path, args.max_image_size)
 
                 # Extract Japanese text
-                japanese_text = extract_text_from_image(ocr, preprocessed_path)
+                japanese_text = extract_text_from_image(ocr, preprocessed_path, float(args.confidence_threshold))
 
                 # Clean up preprocessed image if it's different from original
                 if preprocessed_path != image_path and os.path.exists(preprocessed_path):
