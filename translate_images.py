@@ -88,21 +88,25 @@ class TranslationCache:
         except Exception as e:
             logger.error(f"Error saving cache: {e}")
 
-    def get_cache_key(self, image_name: str, japanese_text: str) -> str:
-        """Generate a unique cache key for the image and text."""
-        # Use both image name and text hash to handle cases where same image might have different text
-        text_hash = hashlib.md5(japanese_text.encode('utf-8')).hexdigest()
-        return f"{image_name}:{text_hash}"
+    def get_cache_key(self, image_name: str) -> str:
+        """Generate a cache key using only image name."""
+        return image_name
 
-    def get(self, image_name: str, japanese_text: str) -> str:
-        """Get cached translation if available."""
-        key = self.get_cache_key(image_name, japanese_text)
-        return self.cache.get(key)
+    def get(self, image_name: str) -> Tuple[str, str]:
+        """Get cached Japanese text and translation if available."""
+        key = self.get_cache_key(image_name)
+        cached_data = self.cache.get(key)
+        if cached_data:
+            return cached_data.get('japanese_text', ''), cached_data.get('english_text', '')
+        return None, None
 
     def set(self, image_name: str, japanese_text: str, english_text: str):
-        """Store translation in cache."""
-        key = self.get_cache_key(image_name, japanese_text)
-        self.cache[key] = english_text
+        """Store Japanese text and translation in cache."""
+        key = self.get_cache_key(image_name)
+        self.cache[key] = {
+            'japanese_text': japanese_text,
+            'english_text': english_text
+        }
         self._save_cache()
 
 
@@ -383,40 +387,43 @@ def process_images(args) -> Dict[str, Tuple[str, str]]:
             logger.info(f"Processing image {i + j}/{total}: {image_name}")
 
             try:
-                # Preprocess image to reduce size if necessary
-                preprocessed_path = preprocess_image(image_path, args.max_image_size)
+                # Check cache first before doing OCR
+                cached_japanese, cached_english = translation_cache.get(image_name)
 
-                # Extract Japanese text
-                japanese_text = extract_text_from_image(
-                    ocr, preprocessed_path, args.confidence_threshold)
+                if cached_japanese is not None and cached_english is not None:
+                    logger.info(f"Using fully cached data for {image_name}")
+                    japanese_text = cached_japanese
+                    english_text = cached_english
+                else:
+                    # No cache, proceed with OCR and translation
+                    # Preprocess image to reduce size if necessary
+                    preprocessed_path = preprocess_image(image_path, args.max_image_size)
 
-                # Clean up preprocessed image if it's different from original
-                if preprocessed_path != image_path and os.path.exists(preprocessed_path):
-                    try:
-                        os.remove(preprocessed_path)
-                    except Exception:
-                        pass
+                    # Extract Japanese text
+                    japanese_text = extract_text_from_image(
+                        ocr, preprocessed_path, args.confidence_threshold)
 
-                # Translate to English if we got text
-                english_text = ""
-                if japanese_text:
-                    # Check cache first
-                    cached_translation = translation_cache.get(image_name, japanese_text)
-                    if cached_translation:
-                        english_text = cached_translation
-                        logger.info(f"Using cached translation for {image_name}")
-                    else:
+                    # Clean up preprocessed image if it's different from original
+                    if preprocessed_path != image_path and os.path.exists(preprocessed_path):
+                        try:
+                            os.remove(preprocessed_path)
+                        except Exception:
+                            pass
+
+                    # Translate to English if we got text
+                    english_text = ""
+                    if japanese_text:
                         logger.info(f"Translating text from {image_name}")
                         if args.translator == 'google':
                             english_text = translate_text_google(translate_client, parent, japanese_text, target_language='en', source_language='ja')
                         else:  # huggingface
                             english_text = translate_text_huggingface(translator, japanese_text)
 
-                        # Cache the translation
+                        # Cache both Japanese text and translation
                         if english_text and not english_text.startswith("[Translation error"):
                             translation_cache.set(image_name, japanese_text, english_text)
-                else:
-                    logger.warning(f"No text extracted from {image_name}")
+                    else:
+                        logger.warning(f"No text extracted from {image_name}")
 
                 # Add to overall results
                 results[image_name] = (japanese_text, english_text)
