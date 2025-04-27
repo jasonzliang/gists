@@ -163,7 +163,7 @@ def extract_text_from_image(ocr, image_path: str) -> str:
                     confidence = line[1][1]  # Get confidence score
 
                     # Only add text with confidence above threshold
-                    if text and text.strip() and confidence > 0.5:
+                    if text and text.strip() and confidence > args.confidence_threshold:
                         text_lines.append(text)
 
         # Clean up memory explicitly
