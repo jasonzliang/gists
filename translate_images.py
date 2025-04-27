@@ -371,7 +371,8 @@ def process_images(args) -> Dict[str, Tuple[str, str]]:
                 preprocessed_path = preprocess_image(image_path, args.max_image_size)
 
                 # Extract Japanese text
-                japanese_text = extract_text_from_image(ocr, preprocessed_path, float(args.confidence_threshold))
+                japanese_text = extract_text_from_image(
+                    ocr, preprocessed_path, args.confidence_threshold)
 
                 # Clean up preprocessed image if it's different from original
                 if preprocessed_path != image_path and os.path.exists(preprocessed_path):
