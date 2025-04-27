@@ -47,7 +47,7 @@ try:
     from paddleocr import PaddleOCR
 except ImportError:
     logger.error("PaddleOCR not found. Installing...")
-    os.system("pip install paddleocr")
+    os.system("pip install paddleocr paddlepaddle")
     from paddleocr import PaddleOCR
 
 # Import PIL for image validation
