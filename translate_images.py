@@ -6,7 +6,7 @@ Japanese Image OCR and Translation Tool - CPU Version with HuggingFace Option
 This script processes a directory of images containing Japanese text:
 1. Uses PaddleOCR to extract Japanese text from images (CPU only)
 2. Translates the text to English using either:
-   - Google Translate API
+   - Google Translate API v3
    - Helsinki-NLP/opus-mt-ja-en model via HuggingFace transformers
 3. Caches translated text for each image to avoid duplicate translations
 4. Outputs two text files with timestamps:
@@ -177,19 +177,27 @@ def extract_text_from_image(ocr, image_path: str, conf_thres: float) -> str:
         return ""
 
 
-def translate_text_google(translate_client, text: str, target_language: str = 'en', source_language: str = 'ja') -> str:
-    """Translate text using Google Translate API."""
+def translate_text_google(translate_client, parent, text: str, target_language: str = 'en', source_language: str = 'ja') -> str:
+    """Translate text using Google Translate API v3."""
     if not text.strip():
         return ""
 
     try:
-        # Explicitly set source language to Japanese
-        result = translate_client.translate(
-            text,
-            target_language=target_language,
-            source_language=source_language
+        response = translate_client.translate_text(
+            request={
+                "parent": parent,
+                "contents": [text],
+                "mime_type": "text/plain",
+                "source_language_code": source_language,
+                "target_language_code": target_language,
+            }
         )
-        return result['translatedText']
+
+        # Return the translated text
+        if response.translations:
+            return response.translations[0].translated_text
+        else:
+            return "[No translation returned]"
     except Exception as e:
         logger.error(f"Translation error: {e}")
         return f"[Translation error: {e}]"
@@ -299,29 +307,37 @@ def process_images(args) -> Dict[str, Tuple[str, str]]:
 
     # Initialize translator based on choice
     if args.translator == 'google':
-        # Import Google Translate
+        # Import Google Translate v3
         try:
-            from google.cloud import translate_v2 as translate
+            from google.cloud import translate_v3 as translate
         except ImportError:
             logger.error("Google Cloud Translate not found. Installing...")
-            os.system("pip install google-cloud-translate==2.0.1")
-            from google.cloud import translate_v2 as translate
+            os.system("pip install google-cloud-translate")
+            from google.cloud import translate_v3 as translate
 
-        logger.info("Initializing Google Translate API...")
+        logger.info("Initializing Google Translate API v3...")
         if not args.google_credentials:
             logger.error("Google credentials file required when using Google Translate")
             return {}
 
         os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = args.google_credentials
-        translate_client = translate.Client()
+        translate_client = translate.TranslationServiceClient()
+
+        # Get project ID from credentials
+        import json
+        with open(args.google_credentials, 'r') as f:
+            credentials_data = json.load(f)
+            project_id = credentials_data['project_id']
+
+        parent = f"projects/{project_id}/locations/global"
     else:  # huggingface
         # Import HuggingFace transformers
         try:
             import torch
             from transformers import pipeline
         except ImportError:
-            logger.error("Transformers not found. Installing...")
-            os.system("pip install transformers sentencepiece")
+            logger.error("Transformers/torch not found. Installing...")
+            os.system("pip install transformers sentencepiece torch")
             from transformers import pipeline
 
         logger.info("Initializing HuggingFace translation model...")
@@ -392,7 +408,7 @@ def process_images(args) -> Dict[str, Tuple[str, str]]:
                     else:
                         logger.info(f"Translating text from {image_name}")
                         if args.translator == 'google':
-                            english_text = translate_text_google(translate_client, japanese_text, target_language='en', source_language='ja')
+                            english_text = translate_text_google(translate_client, parent, japanese_text, target_language='en', source_language='ja')
                         else:  # huggingface
                             english_text = translate_text_huggingface(translator, japanese_text)
 
