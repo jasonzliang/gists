@@ -1,24 +1,31 @@
-#!/usr/bin/env python
+##!/usr/bin/env python
 
 """
-Japanese Image OCR and Translation Tool - CPU Version
+Japanese Image OCR and Translation Tool - CPU Version with HuggingFace Option
 
 This script processes a directory of images containing Japanese text:
 1. Uses PaddleOCR to extract Japanese text from images (CPU only)
-2. Translates the text to English using Google Translate API
+2. Translates the text to English using either:
+   - Google Translate API
+   - Helsinki-NLP/opus-mt-ja-en model via HuggingFace transformers
 3. Caches translated text for each image to avoid duplicate translations
 4. Outputs two text files with timestamps:
-   - japanese_output.txt: Original Japanese text from each image
-   - english_output.txt: Translated English text from each image
+   - japanese_output.txt: Original Japanese text from each image, separated by image name
+   - english_output.txt: Translated English text from each image, separated by image name
 
 Requirements:
 - PaddlePaddle (CPU version)
 - PaddleOCR
-- Google Cloud Translate API
+- Google Cloud Translate API (optional)
+- HuggingFace transformers and sentencepiece (optional)
 - PIL (Python Imaging Library)
 
 Usage:
-    python translate_images.py --image_dir /path/to/image/directory --google_credentials /path/to/google_credentials.json
+    # Using Google Translate
+    python translate_images.py --image_dir /path/to/image/directory --translator google --google_credentials /path/to/google_credentials.json
+
+    # Using HuggingFace model
+    python translate_images.py --image_dir /path/to/image/directory --translator huggingface
 """
 
 import os
@@ -42,14 +49,6 @@ except ImportError:
     logger.error("PaddleOCR not found. Installing...")
     os.system("pip install paddleocr")
     from paddleocr import PaddleOCR
-
-# Import Google Translate
-try:
-    from google.cloud import translate_v2 as translate
-except ImportError:
-    logger.error("Google Cloud Translate not found. Installing...")
-    os.system("pip install google-cloud-translate==2.0.1")
-    from google.cloud import translate_v2 as translate
 
 # Import PIL for image validation
 try:
@@ -178,7 +177,7 @@ def extract_text_from_image(ocr, image_path: str) -> str:
         return ""
 
 
-def translate_text(translate_client, text: str, target_language: str = 'en', source_language: str = 'ja') -> str:
+def translate_text_google(translate_client, text: str, target_language: str = 'en', source_language: str = 'ja') -> str:
     """Translate text using Google Translate API."""
     if not text.strip():
         return ""
@@ -193,6 +192,38 @@ def translate_text(translate_client, text: str, target_language: str = 'en', sou
         return result['translatedText']
     except Exception as e:
         logger.error(f"Translation error: {e}")
+        return f"[Translation error: {e}]"
+
+
+def translate_text_huggingface(translator, text: str) -> str:
+    """Translate text using HuggingFace transformers."""
+    if not text.strip():
+        return ""
+
+    try:
+        # Handle long texts by splitting into smaller chunks
+        max_length = 512  # Safe limit for the model
+        text_lines = text.split('\n')
+        translated_lines = []
+
+        for line in text_lines:
+            if len(line) > max_length:
+                # Split long lines into chunks
+                chunks = [line[i:i+max_length] for i in range(0, len(line), max_length)]
+                translated_chunks = []
+                for chunk in chunks:
+                    result = translator(chunk, max_length=max_length)
+                    translated_chunks.append(result[0]['translation_text'])
+                translated_lines.append(''.join(translated_chunks))
+            else:
+                result = translator(line, max_length=max_length)
+                translated_lines.append(result[0]['translation_text'])
+
+        return '\n'.join(translated_lines)
+    except Exception as e:
+        logger.error(f"HuggingFace translation error: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         return f"[Translation error: {e}]"
 
 
@@ -266,10 +297,34 @@ def process_images(args) -> Dict[str, Tuple[str, str]]:
         use_space_char=True,  # Important for Japanese text
     )
 
-    # Initialize Google Translate
-    logger.info("Initializing Google Translate API...")
-    os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = args.google_credentials
-    translate_client = translate.Client()
+    # Initialize translator based on choice
+    if args.translator == 'google':
+        # Import Google Translate
+        try:
+            from google.cloud import translate_v2 as translate
+        except ImportError:
+            logger.error("Google Cloud Translate not found. Installing...")
+            os.system("pip install google-cloud-translate==2.0.1")
+            from google.cloud import translate_v2 as translate
+
+        logger.info("Initializing Google Translate API...")
+        if not args.google_credentials:
+            logger.error("Google credentials file required when using Google Translate")
+            return {}
+
+        os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = args.google_credentials
+        translate_client = translate.Client()
+    else:  # huggingface
+        # Import HuggingFace transformers
+        try:
+            from transformers import pipeline
+        except ImportError:
+            logger.error("Transformers not found. Installing...")
+            os.system("pip install transformers sentencepiece")
+            from transformers import pipeline
+
+        logger.info("Initializing HuggingFace translation model...")
+        translator = pipeline("translation", model="Helsinki-NLP/opus-mt-ja-en")
 
     # Initialize translation cache
     cache_dir = os.path.join(args.output_dir, 'cache')
@@ -293,7 +348,6 @@ def process_images(args) -> Dict[str, Tuple[str, str]]:
         batch_files = image_files[i:i+batch_size]
         logger.info(f"Processing batch {i//batch_size + 1}/{(len(image_files)-1)//batch_size + 1} ({len(batch_files)} images)")
 
-        batch_results = {}
         for j, image_path in enumerate(batch_files, 1):
             image_name = os.path.basename(image_path)
             logger.info(f"Processing image {i + j}/{total}: {image_name}")
@@ -322,18 +376,22 @@ def process_images(args) -> Dict[str, Tuple[str, str]]:
                         logger.info(f"Using cached translation for {image_name}")
                     else:
                         logger.info(f"Translating text from {image_name}")
-                        english_text = translate_text(translate_client, japanese_text, target_language='en', source_language='ja')
+                        if args.translator == 'google':
+                            english_text = translate_text_google(translate_client, japanese_text, target_language='en', source_language='ja')
+                        else:  # huggingface
+                            english_text = translate_text_huggingface(translator, japanese_text)
+
                         # Cache the translation
                         if english_text and not english_text.startswith("[Translation error"):
                             translation_cache.set(image_name, japanese_text, english_text)
                 else:
                     logger.warning(f"No text extracted from {image_name}")
 
-                # Store results
-                batch_results[image_name] = (japanese_text, english_text)
-
                 # Add to overall results
                 results[image_name] = (japanese_text, english_text)
+
+                # Write result to file immediately after processing each image
+                write_single_result(image_name, japanese_text, english_text, args.output_dir, args.image_dir)
 
             except Exception as e:
                 logger.error(f"Error processing {image_name}: {e}")
@@ -348,15 +406,11 @@ def process_images(args) -> Dict[str, Tuple[str, str]]:
         # Force garbage collection after each batch
         gc.collect()
 
-        # Write intermediate results to avoid losing progress if process crashes
-        if batch_results:
-            write_output_files(batch_results, args.output_dir, args.image_dir)
-
     return results
 
 
-def write_output_files(results: Dict[str, Tuple[str, str]], output_dir: str, image_dir: str):
-    """Write the results to output files with current timestamp."""
+def write_single_result(image_name: str, japanese_text: str, english_text: str, output_dir: str, image_dir: str):
+    """Write/append a single result to Japanese and English output files."""
     # Ensure output directory exists
     os.makedirs(output_dir, exist_ok=True)
 
@@ -364,35 +418,36 @@ def write_output_files(results: Dict[str, Tuple[str, str]], output_dir: str, ima
     dir_name = os.path.basename(os.path.normpath(image_dir))
     dir_name = dir_name.replace(' ', '_')  # Replace spaces with underscores
 
-    # Add timestamp to the filename
-    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    japanese_output_path = os.path.join(output_dir, f"{dir_name}_japanese_{timestamp}.txt")
-    english_output_path = os.path.join(output_dir, f"{dir_name}_english_{timestamp}.txt")
+    # No timestamp in filename - we want to append to the same files
+    japanese_output_path = os.path.join(output_dir, f"{dir_name}_japanese.txt")
+    english_output_path = os.path.join(output_dir, f"{dir_name}_english.txt")
 
-    # Add timestamp to help differentiate between runs
+    # Add timestamp for run information
     run_timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    # Write Japanese output (write mode, creates new file with timestamp)
-    with open(japanese_output_path, 'w', encoding='utf-8') as jp_file:
-        jp_file.write(f"===== RUN: {run_timestamp} =====\n\n")
-        if not results:
-            jp_file.write("No results to write.\n")
-        else:
-            for image_name, (japanese_text, _) in results.items():
-                jp_file.write(f"===== {image_name} =====\n")
-                jp_file.write(japanese_text if japanese_text else "[No text detected]" + "\n\n")
+    # Check if files exist to determine whether to write headers
+    japanese_exists = os.path.exists(japanese_output_path)
+    english_exists = os.path.exists(english_output_path)
 
-    # Write English output (write mode, creates new file with timestamp)
-    with open(english_output_path, 'w', encoding='utf-8') as en_file:
-        en_file.write(f"===== RUN: {run_timestamp} =====\n\n")
-        if not results:
-            en_file.write("No results to write.\n")
-        else:
-            for image_name, (_, english_text) in results.items():
-                en_file.write(f"===== {image_name} =====\n")
-                en_file.write(english_text if english_text else "[No translation available]" + "\n\n")
+    # Write Japanese output (append mode)
+    with open(japanese_output_path, 'a', encoding='utf-8') as jp_file:
+        if not japanese_exists:
+            jp_file.write(f"===== RUN: {run_timestamp} =====\n\n")
 
-    logger.info(f"Output written to {japanese_output_path} and {english_output_path}")
+        jp_file.write(f"===== {image_name} =====\n")
+        jp_file.write(japanese_text if japanese_text else "[No text detected]")
+        jp_file.write("\n\n" + "-" * 50 + "\n\n")
+
+    # Write English output (append mode)
+    with open(english_output_path, 'a', encoding='utf-8') as en_file:
+        if not english_exists:
+            en_file.write(f"===== RUN: {run_timestamp} =====\n\n")
+
+        en_file.write(f"===== {image_name} =====\n")
+        en_file.write(english_text if english_text else "[No translation available]")
+        en_file.write("\n\n" + "-" * 50 + "\n\n")
+
+    logger.info(f"Results for {image_name} appended to output files")
 
 
 def main():
@@ -401,8 +456,10 @@ def main():
         description="Process images with Japanese text using PaddleOCR and translate to English")
     parser.add_argument("--image_dir", required=True,
         help="Directory containing images to process")
-    parser.add_argument("--google_credentials", required=True,
-        help="Path to Google Cloud credentials JSON file")
+    parser.add_argument("--translator", choices=['google', 'huggingface'], default='google',
+        help="Translation service to use (default: google)")
+    parser.add_argument("--google_credentials",
+        help="Path to Google Cloud credentials JSON file (required if using Google Translate)")
     parser.add_argument("--output_dir", default="output",
         help="Directory for output files (default: 'output')")
     parser.add_argument("--batch_size", type=int, default=1,
@@ -442,19 +499,25 @@ def main():
         logger.error(f"Image directory not found: {args.image_dir}")
         return
 
-    # Check if the credentials file exists
-    if not os.path.isfile(args.google_credentials):
+    # Check if Google credentials are provided when using Google Translate
+    if args.translator == 'google' and not args.google_credentials:
+        logger.error("Google credentials file required when using Google Translate")
+        return
+
+    # Check if the credentials file exists (if provided)
+    if args.google_credentials and not os.path.isfile(args.google_credentials):
         logger.error(f"Google credentials file not found: {args.google_credentials}")
         return
 
     # Verify we can access the credentials file
-    try:
-        with open(args.google_credentials, 'r') as f:
-            # Just checking if we can read it
-            pass
-    except Exception as e:
-        logger.error(f"Error reading Google credentials file: {e}")
-        return
+    if args.google_credentials:
+        try:
+            with open(args.google_credentials, 'r') as f:
+                # Just checking if we can read it
+                pass
+        except Exception as e:
+            logger.error(f"Error reading Google credentials file: {e}")
+            return
 
     # Configure logging to file as well (in addition to stdout)
     log_dir = os.path.join(args.output_dir, "logs")
@@ -467,12 +530,12 @@ def main():
 
     try:
         # Process the images
-        logger.info("Starting image processing in CPU-only mode...")
+        logger.info(f"Starting image processing in CPU-only mode using {args.translator} for translation...")
         logger.info(f"Using batch size: {args.batch_size}, CPU threads: {args.cpu_threads}, Max image size: {args.max_image_size}")
 
         results = process_images(args)
 
-        # Write the output files
+        # No need to write final results since we're writing after each image
         if results:
             logger.info(f"Successfully processed {len(results)} images")
         else:
