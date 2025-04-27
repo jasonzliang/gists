@@ -478,8 +478,8 @@ def main():
         help="Directory for output files (default: 'output')")
     parser.add_argument("--batch_size", type=int, default=1,
         help="Number of images to process before writing results (default: 1)")
-    parser.add_argument("--max_image_size", type=int, default=1200,
-        help="Maximum dimension for image preprocessing (default: 1200)")
+    parser.add_argument("--max_image_size", type=int, default=1500,
+        help="Maximum dimension for image preprocessing (default: 1500)")
     parser.add_argument("--cpu_threads", type=int, default=10,
         help="Number of CPU threads to use (default: 10)")
     parser.add_argument("--confidence_threshold", type=float, default=0.5,
