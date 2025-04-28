@@ -87,22 +87,26 @@ with open("./moondream_custom/__init__.py", "w") as f:
 # Add directory to Python path
 sys.path.insert(0, os.path.abspath('./'))
 
-# Function to calculate display dimensions without modifying the original image
-def calculate_display_dimensions(image, max_width=900, max_height=600):
+# Function to calculate display dimensions and draw image
+def st_display_image(image, caption="Uploaded image", max_height=600):
+    """Display image responsively with a height limit"""
+    # Calculate the aspect ratio
     width, height = image.size
+    aspect_ratio = width / height
 
-    # Calculate the scaling factors for both dimensions
-    width_scale = max_width / width if width > max_width else 1
-    height_scale = max_height / height if height > max_height else 1
+    # If the height exceeds max_height, calculate the proportional width
+    if height > max_height:
+        # Create a resized version of the image with limited height
+        # This preserves aspect ratio while limiting height
+        new_height = max_height
+        new_width = int(new_height * aspect_ratio)
+        resized_img = image.resize((new_width, new_height), Image.LANCZOS)
 
-    # Use the smaller scaling factor to ensure both dimensions fit within constraints
-    scale = min(width_scale, height_scale)
-
-    # Calculate new dimensions
-    display_width = int(width * scale)
-    display_height = int(height * scale)
-
-    return display_width, display_height
+        # Display the resized image with container width
+        st.image(resized_img, caption=caption, width=new_width)
+    else:
+        # Image is already within height limits, display normally
+        st.image(image, caption=caption, use_container_width=True)
 
 # Get system info function
 def get_system_info():
@@ -139,22 +143,25 @@ def load_model():
         # Determine best device
         if torch.cuda.is_available():
             device = "cuda"
-            device_map = "auto"
         elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
             device = "mps"
-            device_map = "auto"
         else:
             device = "cpu"
-            device_map = None
 
-        # Load the model
+        # Load the model without device_map but with appropriate device
+        model_name = "vikhyatk/moondream2"
+
+        # For MPS and CPU, we don't use device_map
         model = AutoModelForCausalLM.from_pretrained(
-            "vikhyatk/moondream2",
+            model_name,
             trust_remote_code=True,
             use_safetensors=True,
             low_cpu_mem_usage=True,
-            device_map=device_map
+            # No device_map parameter
         )
+
+        # Move model to the appropriate device
+        model = model.to(device)
 
         # Patch the vision_projection function
         for name, module in list(sys.modules.items()):
@@ -211,7 +218,7 @@ def draw_annotations(image, annotation_type, objects, label):
         font = None
 
     # Process each object
-    x = None; y = None; radius = 20
+    x = None; y = None; radius = font_size//8; border_width = font_size//12
     for i, obj in enumerate(objects):
         # For detection objects
         if annotation_type == "detection":
@@ -231,7 +238,7 @@ def draw_annotations(image, annotation_type, objects, label):
                 y2 = float(bbox["y_max"]) * img_height
 
                 # Draw rectangle - use thick line
-                draw.rectangle([x, y, x2, y2], outline="red", width=3)
+                draw.rectangle([x, y, x2, y2], outline="red", width=border_width)
 
         # For pointing objects
         elif "x" in obj and "y" in obj:
@@ -243,7 +250,6 @@ def draw_annotations(image, annotation_type, objects, label):
             draw.ellipse((x-radius, y-radius, x+radius, y+radius), fill="red")
 
             # Draw a white border around the circle
-            border_width = 2
             draw.ellipse((x-radius-border_width, y-radius-border_width,
                          x+radius+border_width, y+radius+border_width),
                          outline="white", width=border_width)
@@ -309,8 +315,7 @@ if uploaded_file is not None:
 
     # Display the image with smaller dimension limitation
     with image_container:
-        display_width, display_height = calculate_display_dimensions(image)
-        st.image(image, caption="Uploaded Image", width=display_width)
+        st_display_image(image)
 
     # Model loading button
     if st.button("Load Model and Process Image") or st.session_state.model_loaded:
@@ -378,6 +383,7 @@ if uploaded_file is not None:
 
                 # Question options
                 questions = [
+                    "",
                     "What's in this image?",
                     "How many people are in this image?",
                     "What colors are prominent?",
@@ -485,12 +491,10 @@ if uploaded_file is not None:
                 if st.session_state.annotated_image is not None:
                     st.write("")  # Add spacing
                     with st.expander("View Annotated Image", expanded=True):
-                        display_width, display_height = calculate_display_dimensions(
-                            st.session_state.annotated_image, max_height=1000)
-                        st.image(
+                        st_display_image(
                             st.session_state.annotated_image,
                             caption=f"Analyzing: {st.session_state.annotation_results['label']}",
-                            width=display_width
+                            max_height=1000
                         )
 
         except Exception as e:
