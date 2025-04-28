@@ -99,7 +99,7 @@ def check_password():
         return True
 
     # Show input for password
-    st.title("🔒 GeoCLIP Location Predictor")
+    st.title("🔒 Moondream2 Image Analysis")
     st.write("Please enter the password to access this app")
 
     # Create password field and button
