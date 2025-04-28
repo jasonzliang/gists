@@ -1,24 +1,28 @@
 import sys
 import os
-import types
 import traceback
 import hmac
 import base64
 
 import streamlit as st
 from PIL import Image, ImageDraw
-import torch
 import platform
 import psutil
 import GPUtil
 import numpy as np
-import pillow_heif
-import pillow_avif
 
-# Register the HEIF file format plugin
+# Configure torch by setting up the required environment variables
+import torchruntime
+torchruntime.configure()
+
+# Register the AVIF/HEIF file format plugin
+import pillow_avif
+import pillow_heif
 pillow_heif.register_heif_opener()
 
 # Fix for torch.classes error
+import torch
+import types
 dummy_module = types.ModuleType("dummy_classes")
 dummy_module.__path__ = []
 sys.modules["torch.classes"] = dummy_module
@@ -545,5 +549,5 @@ if uploaded_file is not None:
             3. Make sure you have sufficient RAM
             4. Try a system without MPS/GPU if problems persist
             5. Try installing following packages:
-            pip install streamlit pillow torch transformers pillow-heif pillow-avif-plugin psutil gputil numpy pyvips pyvips-binary
+            pip install streamlit pillow torch transformers pillow-heif pillow-avif-plugin psutil gputil numpy pyvips pyvips-binary torchruntime
             """)
