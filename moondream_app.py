@@ -1,13 +1,16 @@
-import streamlit as st
 import sys
 import os
+import types
+import traceback
+import hmac
+import base64
+
+import streamlit as st
 from PIL import Image, ImageDraw
 import torch
 import platform
 import psutil
 import GPUtil
-import types
-import traceback
 import numpy as np
 import pillow_heif
 import pillow_avif
@@ -86,6 +89,32 @@ with open("./moondream_custom/__init__.py", "w") as f:
 
 # Add directory to Python path
 sys.path.insert(0, os.path.abspath('./'))
+
+# Add these authentication functions after the imports and before the page config
+def check_password():
+    """Returns `True` if the user had the correct password."""
+
+    # Return True if the password is validated
+    if st.session_state.get("password_correct", False):
+        return True
+
+    # Show input for password
+    st.title("🔒 GeoCLIP Location Predictor")
+    st.write("Please enter the password to access this app")
+
+    # Create password field and button
+    password = st.text_input("Password", type="password", key="password_input")
+    login_button = st.button("Login")
+
+    if login_button:
+        if hmac.compare_digest(password, st.secrets["password"]):
+            st.session_state["password_correct"] = True
+            st.rerun()
+            return True
+        else:
+            st.error("😕 Incorrect password. Please try again.")
+
+    return False
 
 # Function to calculate display dimensions and draw image
 def st_display_image(image, caption="Uploaded image", max_height=600):
@@ -273,6 +302,10 @@ def draw_annotations(image, annotation_type, objects, label):
         display_image = display_image.convert(image.mode)
 
     return display_image
+
+# Check for authentication first
+if not check_password():
+    exit()
 
 # Main app
 st.title("🌙 Moondream2 Image Analysis")
