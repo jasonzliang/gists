@@ -10,16 +10,23 @@ import types
 import traceback
 import numpy as np
 
+import pillow_heif
+import pillow_avif
+
+# Register the HEIF file format plugin
+pillow_heif.register_heif_opener()
+
+# Fix for torch.classes error
+dummy_module = types.ModuleType("dummy_classes")
+dummy_module.__path__ = []
+sys.modules["torch.classes"] = dummy_module
+
 # Configure the app
 st.set_page_config(
     page_title="Moondream2 Image Analysis",
     page_icon="🌙",
     layout="wide"
 )
-
-# Fix for torch.classes error
-sys.modules["torch.classes"] = types.ModuleType("dummy_classes")
-sys.modules["torch.classes"].__path__ = []
 
 # Create custom module for vision fixes
 os.makedirs("./moondream_custom", exist_ok=True)
@@ -289,7 +296,7 @@ if 'annotation_results' not in st.session_state:
 image_container = st.container()
 
 # Upload section
-uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
+uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png", "avif", "heic"])
 
 if uploaded_file is not None:
     # Load image (without resizing)
