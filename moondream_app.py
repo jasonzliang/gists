@@ -9,7 +9,6 @@ import GPUtil
 import types
 import traceback
 import numpy as np
-
 import pillow_heif
 import pillow_avif
 
@@ -503,4 +502,6 @@ if uploaded_file is not None:
             2. Check your internet connection
             3. Make sure you have sufficient RAM
             4. Try a system without MPS/GPU if problems persist
+            5. Try installing following packages:
+            pip install streamlit pillow torch transformers pillow-heif pillow-avif-plugin psutil gputil numpy pyvips pyvips-binary
             """)
