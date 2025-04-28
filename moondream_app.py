@@ -364,18 +364,18 @@ if uploaded_file is not None:
         try:
             # Load model if not already loaded
             if not st.session_state.model_loaded:
-                with st.spinner("Loading Moondream2 model (this may take a few minutes)..."):
+                with st.spinner("Loading Moondream2 model (please wait)..."):
                     st.session_state.model_and_device = load_model()
                     st.session_state.model_loaded = True
 
-            # Process the current image
-            with st.spinner("Processing image..."):
-                model, device = st.session_state.model_and_device
-                st.session_state.encoded_image = None  # Clear previous
-                st.session_state.encoded_image = safe_model_execution(
-                    lambda img: model.encode_image(img),
-                    st.session_state.image
-                )
+                # Process the current image
+                with st.spinner("Processing image..."):
+                    model, device = st.session_state.model_and_device
+                    st.session_state.encoded_image = None  # Clear previous
+                    st.session_state.encoded_image = safe_model_execution(
+                        lambda img: model.encode_image(img),
+                        st.session_state.image
+                    )
 
             # Create tabs for different features
             tabs = st.tabs(["Captions", "Visual Query", "Object Analysis"])
