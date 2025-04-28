@@ -91,6 +91,7 @@ sys.path.insert(0, os.path.abspath('./'))
 def st_display_image(image, caption="Uploaded image", max_height=600):
     """Display image responsively with a height limit"""
     # Calculate the aspect ratio
+    container_width = 900
     width, height = image.size
     aspect_ratio = width / height
 
@@ -102,8 +103,11 @@ def st_display_image(image, caption="Uploaded image", max_height=600):
         new_width = int(new_height * aspect_ratio)
         resized_img = image.resize((new_width, new_height), Image.LANCZOS)
 
-        # Display the resized image with container width
-        st.image(resized_img, caption=caption, width=new_width)
+        # Display the resized image with container width as limit
+        if new_width < container_width:
+            st.image(resized_img, caption=caption, width=new_width)
+        else:
+            st.image(image, caption=caption, use_container_width=True)
     else:
         # Image is already within height limits, display normally
         st.image(image, caption=caption, use_container_width=True)
@@ -298,7 +302,8 @@ with st.sidebar:
 image_container = st.container()
 
 # Upload section
-uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png", "avif", "heic"])
+uploaded_file = st.file_uploader("Choose an image...",
+    type=["jpg", "jpeg", "png", "avif", "heic", "webp"])
 
 if uploaded_file is not None:
     # Check if this is a new image
