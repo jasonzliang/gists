@@ -204,7 +204,7 @@ def draw_annotations(image, annotation_type, objects, label):
         font = None
 
     # Process each object
-    x = None; y = None; radius = 0
+    x = None; y = None; radius = 20
     for i, obj in enumerate(objects):
         # For detection objects
         if annotation_type == "detection":
@@ -233,7 +233,6 @@ def draw_annotations(image, annotation_type, objects, label):
             y = float(obj["y"]) * img_height
 
             # Draw circle with a larger radius for better visibility
-            radius = 10
             draw.ellipse((x-radius, y-radius, x+radius, y+radius), fill="red")
 
             # Draw a white border around the circle
@@ -246,9 +245,9 @@ def draw_annotations(image, annotation_type, objects, label):
         label_text = f"{i+1}: {label}"
         if font:
             text_width, text_height = draw.textbbox((0, 0), label_text, font=font)[2:]
-            draw.text((x+radius+5, y-10), f"{i+1}", fill="black", font=font)
+            draw.text((x-(radius+10), y+10), f"{i+1}", fill="black", font=font)
         else:
-            draw.text((x+radius+5, y-10), f"{i+1}", fill="black")
+            draw.text((x-(radius+10), y+10), f"{i+1}", fill="black")
 
     if display_image.mode == 'RGBA' and image.mode != 'RGBA':
         # Convert back to original mode if needed
