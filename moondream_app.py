@@ -253,9 +253,11 @@ def draw_annotations(image, annotation_type, objects, label):
         label_text = f"{i+1}: {label}"
         if font:
             text_width, text_height = draw.textbbox((0, 0), label_text, font=font)[2:]
-            draw.text((x+radius, y+5), f"{i+1}", fill="black", font=font)
+            draw.text((x+radius, y+5), f"{i+1}", fill="white", stroke_width=2,
+                stroke_fill="black", font=font)
         else:
-            draw.text((x+radius, y+5), f"{i+1}", fill="black")
+            draw.text((x+radius, y+5), f"{i+1}", fill="black", stroke_width=2,
+                stroke_fill="black")
 
     if display_image.mode == 'RGBA' and image.mode != 'RGBA':
         # Convert back to original mode if needed
@@ -266,44 +268,47 @@ def draw_annotations(image, annotation_type, objects, label):
 # Main app
 st.title("🌙 Moondream2 Image Analysis")
 
+# Initialize session state variables
+session_vars = {
+    'model_loaded': False, 'encoded_image': None, 'model_and_device': None,
+    'image': None, 'image_id': None, 'annotated_image': None,
+    'annotation_results': None, 'short_caption': None, 'normal_caption': None,
+    'long_caption': None
+}
+
+for key, value in session_vars.items():
+    if key not in st.session_state:
+        st.session_state[key] = value
+
 # Sidebar with system info
 with st.sidebar:
-    st.markdown("### About This App")
-    st.markdown("This app uses Moondream2 to analyze your images.")
+    st.markdown("### About This App\nThis app uses Moondream2 to analyze your images.")
 
     st.markdown("### System Information")
     system_info = get_system_info()
     for key, value in system_info.items():
         st.write(f"**{key}:** {value}")
 
-# Initialize session state
-if 'model_loaded' not in st.session_state:
-    st.session_state.model_loaded = False
-if 'encoded_image' not in st.session_state:
-    st.session_state.encoded_image = None
-if 'model_and_device' not in st.session_state:
-    st.session_state.model_and_device = None
-if 'image' not in st.session_state:
-    st.session_state.image = None
-if 'image_id' not in st.session_state:
-    st.session_state.image_id = None
-if 'annotated_image' not in st.session_state:
-    st.session_state.annotated_image = None
-if 'annotation_results' not in st.session_state:
-    st.session_state.annotation_results = None
-
-# Image display container - This will always show the original image
+# Image display container
 image_container = st.container()
 
 # Upload section
 uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png", "avif", "heic"])
 
 if uploaded_file is not None:
-    # Load image (without resizing)
+    # Check if this is a new image
+    current_file_bytes = uploaded_file.getvalue()
+    if 'last_uploaded_file_bytes' not in st.session_state or current_file_bytes != st.session_state.last_uploaded_file_bytes:
+        st.session_state.last_uploaded_file_bytes = current_file_bytes
+        st.session_state.short_caption = None
+        st.session_state.normal_caption = None
+        st.session_state.long_caption = None
+
+    # Load image
     image = Image.open(uploaded_file)
     st.session_state.image = image
 
-    # Display the image with smaller dimension limitation in the UI
+    # Display the image with smaller dimension limitation
     with image_container:
         display_width, display_height = calculate_display_dimensions(image)
         st.image(image, caption="Uploaded Image", width=display_width)
@@ -317,12 +322,10 @@ if uploaded_file is not None:
                     st.session_state.model_and_device = load_model()
                     st.session_state.model_loaded = True
 
-            # Always process the current image (regardless of whether model was just loaded)
+            # Process the current image
             with st.spinner("Processing image..."):
                 model, device = st.session_state.model_and_device
-                # Clear any previous encoded image to ensure fresh processing
-                st.session_state.encoded_image = None
-                # Process the current image
+                st.session_state.encoded_image = None  # Clear previous
                 st.session_state.encoded_image = safe_model_execution(
                     lambda img: model.encode_image(img),
                     st.session_state.image
@@ -336,30 +339,38 @@ if uploaded_file is not None:
                 st.subheader("Generate Image Captions")
                 model, _ = st.session_state.model_and_device
 
-                # Caption options in rows
-                if st.button("Generate Short Caption"):
-                    with st.spinner("Generating..."):
-                        caption = safe_model_execution(
-                            lambda img: model.caption(img, length="short"),
-                            st.session_state.encoded_image
-                        )["caption"]
-                        st.success(f"**Short Caption:** {caption}")
+                # Caption buttons in a row
+                col1, col2, col3 = st.columns(3)
 
-                if st.button("Generate Normal Caption"):
-                    with st.spinner("Generating..."):
-                        caption = safe_model_execution(
-                            lambda img: model.caption(img, length="normal"),
+                # Define a helper function for caption generation
+                def generate_caption(length):
+                    with st.spinner(f"Generating {length} caption..."):
+                        caption_result = safe_model_execution(
+                            lambda img: model.caption(img, length=length),
                             st.session_state.encoded_image
-                        )["caption"]
-                        st.success(f"**Normal Caption:** {caption}")
+                        )
+                        return caption_result["caption"]
 
-                if st.button("Generate Long Caption"):
-                    with st.spinner("Generating..."):
-                        caption = safe_model_execution(
-                            lambda img: model.caption(img, length="long"),
-                            st.session_state.encoded_image
-                        )["caption"]
-                        st.success(f"**Long Caption:** {caption}")
+                # Add buttons for each caption type
+                if col1.button("Generate Short Caption"):
+                    st.session_state.short_caption = generate_caption("short")
+                if col2.button("Generate Normal Caption"):
+                    st.session_state.normal_caption = generate_caption("normal")
+                if col3.button("Generate Long Caption"):
+                    st.session_state.long_caption = generate_caption("long")
+
+                # Display all captions
+                st.markdown("### Caption Results")
+                caption_results = st.container()
+
+                with caption_results:
+                    for caption_type, caption in [
+                        ("Short Caption", st.session_state.short_caption),
+                        ("Normal Caption", st.session_state.normal_caption),
+                        ("Long Caption", st.session_state.long_caption)
+                    ]:
+                        if caption:
+                            st.info(f"**{caption_type}:** {caption}")
 
             # Tab 2: Visual Query
             with tabs[1]:
@@ -391,15 +402,15 @@ if uploaded_file is not None:
                         except Exception as e:
                             st.error(f"Error: {str(e)}")
 
-            # Tab 3: Object Analysis (combines detection and pointing)
+            # Tab 3: Object Analysis
             with tabs[2]:
                 st.subheader("Object Analysis")
                 model, _ = st.session_state.model_and_device
 
-                # Create UI for object analysis
+                # Object selection
                 objects = ["person", "face", "cat", "dog", "car", "building", "tree", "food"]
-
                 col1, col2 = st.columns(2)
+
                 with col1:
                     selected_obj = st.selectbox("Select object:", objects)
                     custom_obj = st.text_input("Or specify another object:", "")
@@ -412,39 +423,43 @@ if uploaded_file is not None:
                         if obj_type:
                             with st.spinner(f"Finding {obj_type}..."):
                                 try:
-                                    if analysis_type == "Detection (boxes)":
-                                        function_to_call = lambda img, obj: model.detect(img, obj)
-                                        analysis_type_key = "detection"
-                                    else:  # Pointing
-                                        function_to_call = lambda img, obj: model.point(img, obj)
-                                        analysis_type_key = "pointing"
+                                    # Determine function to call based on analysis type
+                                    analysis_config = {
+                                        "Detection (boxes)": {
+                                            "function": lambda img, obj: model.detect(img, obj),
+                                            "key": "detection"
+                                        },
+                                        "Pointing (points)": {
+                                            "function": lambda img, obj: model.point(img, obj),
+                                            "key": "pointing"
+                                        }
+                                    }
 
+                                    config = analysis_config[analysis_type]
                                     result = safe_model_execution(
-                                        function_to_call,
+                                        config["function"],
                                         st.session_state.encoded_image,
                                         obj_type
                                     )
 
-                                    if "objects" in result:
-                                        objects = result["objects"]
-                                    else:
-                                        objects = result["points"]
+                                    # Get objects from result
+                                    objects = result.get("objects", result.get("points", []))
 
                                     # Display results
                                     if objects:
                                         st.success(f"Found {len(objects)} instances of '{obj_type}'")
 
-                                        # Store results in session state
+                                        # Store results
                                         st.session_state.annotation_results = {
-                                            'type': analysis_type_key,
+                                            'type': config["key"],
                                             'objects': objects,
                                             'label': obj_type
                                         }
 
-                                        # Create annotated image and store in session state
+                                        # Create annotated image
                                         st.session_state.annotated_image = draw_annotations(
                                             st.session_state.image,
-                                            analysis_type_key,
+                                            config["key"],
                                             objects,
                                             obj_type
                                         )
@@ -455,7 +470,6 @@ if uploaded_file is not None:
                                                 st.text(f"Item {i+1}: {obj}")
                                     else:
                                         st.info(f"No instances of '{obj_type}' found")
-                                        # Clear any previous annotation results
                                         st.session_state.annotation_results = None
                                         st.session_state.annotated_image = None
 
@@ -465,22 +479,21 @@ if uploaded_file is not None:
                                     st.session_state.annotated_image = None
 
                     if st.button("Reset Analysis"):
-                        # Clear the annotations but keep the image
                         st.session_state.annotation_results = None
                         st.session_state.annotated_image = None
-                        # Force rerun to update UI
                         st.rerun()
 
-                # Outside of the columns, but still inside the "Object Analysis" tab
-                # Add the full-width expander for annotated image if there is one
+                # Display annotated image if available
                 if st.session_state.annotated_image is not None:
-                    st.write("")  # Add some space
+                    st.write("")  # Add spacing
                     with st.expander("View Annotated Image", expanded=True):
                         display_width, display_height = calculate_display_dimensions(
                             st.session_state.annotated_image, max_height=1000)
-                        st.image(st.session_state.annotated_image,
-                                caption=f"Analyzing: {st.session_state.annotation_results['label']}",
-                                width=display_width)
+                        st.image(
+                            st.session_state.annotated_image,
+                            caption=f"Analyzing: {st.session_state.annotation_results['label']}",
+                            width=display_width
+                        )
 
         except Exception as e:
             st.error(f"Error: {str(e)}")
