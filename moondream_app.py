@@ -379,7 +379,6 @@ if uploaded_file is not None:
 
                 # Question options
                 questions = [
-                    "",
                     "What's in this image?",
                     "How many people are in this image?",
                     "What colors are prominent?",
