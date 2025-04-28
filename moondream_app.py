@@ -12,8 +12,8 @@ import GPUtil
 import numpy as np
 
 # Configure torch by setting up the required environment variables
-import torchruntime
-torchruntime.configure()
+# import torchruntime
+# torchruntime.configure()
 
 # Register the AVIF/HEIF file format plugin
 import pillow_avif
