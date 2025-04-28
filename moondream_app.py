@@ -195,11 +195,12 @@ def draw_annotations(image, annotation_type, objects, label):
     display_image = image.copy()
     draw = ImageDraw.Draw(display_image)
     img_width, img_height = image.size
+    font_size = int(max(img_width, img_height) * 0.04)
 
     # Import font if available
     try:
         from PIL import ImageFont
-        font = ImageFont.load_default(size=16)
+        font = ImageFont.load_default(size=font_size)
     except:
         font = None
 
@@ -245,9 +246,9 @@ def draw_annotations(image, annotation_type, objects, label):
         label_text = f"{i+1}: {label}"
         if font:
             text_width, text_height = draw.textbbox((0, 0), label_text, font=font)[2:]
-            draw.text((x-(radius+10), y+10), f"{i+1}", fill="black", font=font)
+            draw.text((x+radius, y+5), f"{i+1}", fill="black", font=font)
         else:
-            draw.text((x-(radius+10), y+10), f"{i+1}", fill="black")
+            draw.text((x+radius, y+5), f"{i+1}", fill="black")
 
     if display_image.mode == 'RGBA' and image.mode != 'RGBA':
         # Convert back to original mode if needed
