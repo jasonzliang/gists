@@ -23,12 +23,9 @@ dummy_module.__path__ = []
 sys.modules["torch.classes"] = dummy_module
 
 # Get current number of threads
-# num_threads = torch.get_num_threads()
-import multiprocessing
-num_threads = multiprocessing.cpu_count()
-print(f"Current number of threads: {num_threads}")
-torch.set_num_threads(num_threads)
+# print(f"Current number of threads: {num_threads}")
 # torch.set_num_interop_threads(num_threads)
+torch.set_num_threads(psutil.cpu_count(logical=True))
 
 # Register the AVIF/HEIF file format plugin
 import pillow_avif
