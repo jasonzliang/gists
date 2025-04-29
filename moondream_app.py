@@ -15,17 +15,25 @@ import numpy as np
 # import torchruntime
 # torchruntime.configure()
 
-# Register the AVIF/HEIF file format plugin
-import pillow_avif
-import pillow_heif
-pillow_heif.register_heif_opener()
-
 # Fix for torch.classes error
 import torch
 import types
 dummy_module = types.ModuleType("dummy_classes")
 dummy_module.__path__ = []
 sys.modules["torch.classes"] = dummy_module
+
+# Get current number of threads
+# num_threads = torch.get_num_threads()
+import multiprocessing
+num_threads = multiprocessing.cpu_count()
+print(f"Current number of threads: {num_threads}")
+torch.set_num_threads(num_threads)
+torch.set_num_interop_threads(num_threads)
+
+# Register the AVIF/HEIF file format plugin
+import pillow_avif
+import pillow_heif
+pillow_heif.register_heif_opener()
 
 # Configure the app
 st.set_page_config(
