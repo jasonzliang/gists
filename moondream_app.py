@@ -28,7 +28,7 @@ import multiprocessing
 num_threads = multiprocessing.cpu_count()
 print(f"Current number of threads: {num_threads}")
 torch.set_num_threads(num_threads)
-torch.set_num_interop_threads(num_threads)
+# torch.set_num_interop_threads(num_threads)
 
 # Register the AVIF/HEIF file format plugin
 import pillow_avif
