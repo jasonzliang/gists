@@ -103,6 +103,12 @@ sys.path.insert(0, os.path.abspath('./'))
 def check_password():
     """Returns `True` if the user had the correct password."""
 
+    # Return true if password is not set
+    try:
+        assert "password" in st.secrets
+    except st.errors.StreamlitSecretNotFoundError as e:
+        return True
+
     # Return True if the password is validated
     if st.session_state.get("password_correct", False):
         return True

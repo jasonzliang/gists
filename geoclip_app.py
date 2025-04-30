@@ -37,12 +37,18 @@ st.set_page_config(
 def check_password():
     """Returns `True` if the user had the correct password."""
 
+    # Return true if password is not set
+    try:
+        assert "password" in st.secrets
+    except st.errors.StreamlitSecretNotFoundError as e:
+        return True
+
     # Return True if the password is validated
     if st.session_state.get("password_correct", False):
         return True
 
     # Show input for password
-    st.title("🔒 GeoCLIP Location Predictor")
+    st.title("🔒 Moondream2 Image Analysis")
     st.write("Please enter the password to access this app")
 
     # Create password field and button
