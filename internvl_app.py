@@ -142,6 +142,7 @@ def load_model(model_path):
                     torch_dtype=torch.float32,
                     low_cpu_mem_usage=True,
                     trust_remote_code=True).eval()
+
         elif device == "mps":
             st.info("Loading model on Apple Silicon GPU (MPS)")
             # For MPS, we use float16 if available but fallback to float32 if needed
@@ -158,6 +159,7 @@ def load_model(model_path):
                     torch_dtype=torch.float32,
                     low_cpu_mem_usage=True,
                     trust_remote_code=True).eval().to(device)
+
         else:
             st.warning("No GPUs detected. Loading model on CPU (this will be very slow)")
             model = AutoModel.from_pretrained(
