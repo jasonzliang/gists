@@ -22,11 +22,12 @@ fi
 # Check for last Time Machine backup and exit if it's longer than 1 hour ago
 lastBackupDateString=`tmutil latestbackup | grep -E -o "[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{6}"`
 if [ "$lastBackupDateString" == "" ]; then
-    read -n 1 -p "$(tput setaf 3)Last Time Machine backup cannot be found. Proceed anyway?$(tput sgr0) (y/n) " RESP
-    echo ""
-    if [ "$RESP" != "y" ]; then
-        exit
-    fi
+    echo "$(tput setaf 3)Last Time Machine backup cannot be found.$(tput sgr0)"
+    # read -n 1 -p "$(tput setaf 3)Last Time Machine backup cannot be found. Proceed anyway?$(tput sgr0) (y/n) " RESP
+    # echo ""
+    # if [ "$RESP" != "y" ]; then
+    #     exit
+    # fi
 else
     lastBackupDate=`date -j -f "%Y-%m-%d-%H%M%S" $lastBackupDateString "+%s"`
     if [ $((`date +%s` - $lastBackupDate)) -gt 3600 ]
