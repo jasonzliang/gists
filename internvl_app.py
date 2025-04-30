@@ -4,6 +4,7 @@ import os
 import sys
 import random
 import re
+import time
 import hashlib
 from io import BytesIO
 
@@ -569,34 +570,42 @@ def main():
             "OpenGVLab/InternVL3-38B",
             "OpenGVLab/InternVL3-78B"
         ]
-        model_path = st.selectbox("Model Selection", model_options, index=2,
+        model_path = st.selectbox("Model Selection", model_options, index=4,
                                  help="Select the InternVL3 model variant to use.")
 
-        # Add this code after the model selection
         if 'current_model_path' not in st.session_state or st.session_state.current_model_path != model_path:
             # Explicitly unload the previous model if it exists
             if 'model' in st.session_state:
                 try:
                     # Move model to CPU first if it's on GPU
-                    if get_device() == "cuda":
+                    device = get_device()
+                    if device != "cpu":
                         st.session_state.model.to('cpu')
 
-                    # Delete the model and tokenizer
-                    del st.session_state.model
-                    del st.session_state.tokenizer
+                    # Clear any references that might be holding the model
+                    st.session_state.model = None
+                    st.session_state.tokenizer = None
 
                     # Force garbage collection
-                    import gc; gc.collect()
+                    import gc
+                    gc.collect()
 
-                    # Clear CUDA cache if using GPU
-                    if get_device() == "cuda":
+                    # Clear device cache if using GPU
+                    if device == "cuda":
                         torch.cuda.empty_cache()
+                    elif device == "mps":
+                        # MPS doesn't have an explicit cache clear command like CUDA
+                        # but an extra GC can help
+                        gc.collect()
 
                     st.info("Previous model unloaded successfully")
                 except Exception as e:
                     st.warning(f"Error unloading previous model: {str(e)}")
 
-            # Reset model-related session state
+                # Short delay to ensure resources are released
+                time.sleep(0.5)
+
+            # Remove from session state
             st.session_state.pop('model', None)
             st.session_state.pop('tokenizer', None)
             st.session_state.current_model_path = model_path
