@@ -465,6 +465,7 @@ def main():
 
         lan = st.selectbox('Language / 语言', ['English', '中文'],
             help='This is only for switching the UI language.')
+
         if lan == 'English':
             system_message_default = 'I am InternVL3, a multimodal large language model developed by OpenGVLab.'
             system_message_editable = 'Please answer the user questions in detail.'
