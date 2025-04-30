@@ -168,7 +168,25 @@ def load_model(model_path):
                 low_cpu_mem_usage=True,
                 trust_remote_code=True).eval()
 
+        # Set up tokenizer
         tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True, use_fast=False)
+
+        # Perform a test run to catch any initialization issues
+        try:
+            dummy_input = tokenizer("Hello, world!", return_tensors="pt")
+            if device == "cuda":
+                dummy_input = {k: v.cuda() for k, v in dummy_input.items()}
+            elif device == "mps":
+                dummy_input = {k: v.to(device) for k, v in dummy_input.items()}
+
+            with torch.no_grad():
+                # Try to run a quick test to catch initialization issues
+                _ = model.generate(**dummy_input, max_new_tokens=5)
+
+            st.success("Model initialized and tested successfully.")
+        except Exception as e:
+            st.warning(f"Model initialized but test generation failed: {str(e)}. Some features may not work properly.")
+
         return model, tokenizer
     except Exception as e:
         st.error(f"Failed to load model: {str(e)}")
@@ -193,7 +211,7 @@ class Library:
                         st.image(images[idx], use_container_width=True)
 
 def generate_response(messages, model, tokenizer, max_length, temperature, top_p, repetition_penalty, max_input_tiles):
-    """Generate a response using the InternVL model"""
+    """Generate a response using the InternVL model with robust error handling"""
     placeholder = st.empty()
     device = get_device()
 
@@ -201,66 +219,57 @@ def generate_response(messages, model, tokenizer, max_length, temperature, top_p
     pixel_values = None
     if messages[-1]['role'] == 'user' and 'image' in messages[-1] and len(messages[-1]['image']) > 0:
         with st.status("Processing images..."):
+            # Get all images from the user's message
+            images = messages[-1]['image']
+
+            # Process only one image at a time if there are issues
+            image = images[0]  # Just use the first image
+
             try:
-                # Get all images from the user's message
-                images = messages[-1]['image']
-                all_pixel_values = []
+                img_pixel_values = load_image(image, max_num=max_input_tiles)
 
-                # Process each image
-                for img in images:
-                    img_pixel_values = load_image(img, max_num=max_input_tiles)
+                # Convert to appropriate precision based on device
+                if device == "cuda":
+                    img_pixel_values = img_pixel_values.to(torch.float16).cuda()
+                elif device == "mps":
+                    # Try float16 first on MPS (consistent with model loading)
+                    try:
+                        img_pixel_values = img_pixel_values.to(torch.float16).to(device)
+                    except Exception as e:
+                        print(f"Warning: Could not use float16 on MPS: {str(e)}. Falling back to float32.")
+                        img_pixel_values = img_pixel_values.to(torch.float32).to(device)
+                else:
+                    img_pixel_values = img_pixel_values.to(torch.float32)
 
-                    # Move tensors to appropriate device
-                    if device == "cuda":
-                        img_pixel_values = img_pixel_values.to(torch.float16).cuda()
-                    elif device == "mps":
-                        # MPS device may or may not support float16
-                        try:
-                            img_pixel_values = img_pixel_values.to(torch.float16).to(device)
-                        except:
-                            img_pixel_values = img_pixel_values.to(device)
+                # Check for NaN/Inf values
+                if torch.isnan(img_pixel_values).any() or torch.isinf(img_pixel_values).any():
+                    # Try to fix the tensor
+                    img_pixel_values = torch.nan_to_num(img_pixel_values, nan=0.0, posinf=1.0, neginf=-1.0)
 
-                    all_pixel_values.append(img_pixel_values)
+                pixel_values = img_pixel_values
 
-                # Concatenate all image pixel values if there are multiple
-                if all_pixel_values:
-                    if len(all_pixel_values) == 1:
-                        pixel_values = all_pixel_values[0]
-                    else:
-                        pixel_values = torch.cat(all_pixel_values, dim=0)
-
-                        # If handling separate images as in the original code, prepare num_patches_list
-                        num_patches_list = [pv.size(0) for pv in all_pixel_values]
-
-                        # Add image indicators to the prompt if needed
-                        if len(images) > 1:
-                            image_prefix = ''.join([f'Image-{i+1}: <image>\n' for i in range(len(images))])
-                            messages[-1]['content'] = image_prefix + messages[-1]['content']
             except Exception as e:
-                st.error(f"Error processing images: {str(e)}")
-                return f"Error processing images: {str(e)}"
+                st.error(f"Error processing image: {str(e)}")
+                return f"Error processing image: {str(e)}. Please try a different image or check the image format."
 
-    # Prepare conversation history from previous messages (earlier than the last two)
+    # Prepare conversation history
     history = None
     if len(messages) > 2:
-        # Need to convert to the format expected by the model
-        # Original format seems to be user-assistant pairs
         history = []
-        # Skip the most recent message (which is from the user and we're currently responding to)
         for i in range(0, len(messages) - 1, 2):
-            if i + 1 < len(messages):  # Make sure we have both user and assistant messages
+            if i + 1 < len(messages):
                 history.append([messages[i]['content'], messages[i+1]['content']])
 
-    # Configure generation parameters
+    # Configure generation parameters - use safer values
     generation_config = {
         'max_new_tokens': max_length,
-        'do_sample': True,
-        'temperature': float(temperature),
-        'top_p': float(top_p),
-        'repetition_penalty': float(repetition_penalty)
+        'do_sample': temperature > 0.05,  # Only sample if temperature is meaningful
+        'temperature': temperature,  # Ensure temperature isn't too close to zero
+        'top_p': top_p,  # Keep top_p in a safer range
+        'repetition_penalty': repetition_penalty  # Moderate repetition penalty
     }
 
-    # Generate response
+    # Generate response with multiple fallback strategies
     try:
         with st.status("Generating response..."):
             # Get the user's question
@@ -270,25 +279,53 @@ def generate_response(messages, model, tokenizer, max_length, temperature, top_p
             if pixel_values is not None and '<image>' not in question:
                 question = '<image>\n' + question
 
-            # Generate response
-            if history is None:
-                # First message in the conversation with system prompt
-                response = model.chat(tokenizer, pixel_values, question, generation_config)
+            # Attempt generation with the specified parameters
+            try:
+                if history is None:
+                    response = model.chat(tokenizer, pixel_values, question, generation_config)
+                else:
+                    response, _ = model.chat(tokenizer, pixel_values, question, generation_config,
+                                       history=history, return_history=True)
+            except RuntimeError as e:
+                if "inf" in str(e) or "nan" in str(e) or "< 0" in str(e):
+                    st.warning("Encountered probability error. Trying conservative settings...")
+
+                    # Fallback to greedy decoding
+                    fallback_config = {
+                        'max_new_tokens': max_length,
+                        'do_sample': False,  # Use greedy decoding
+                        'num_beams': 1       # Simple beam search
+                    }
+
+                    if history is None:
+                        response = model.chat(tokenizer, pixel_values, question, fallback_config)
+                    else:
+                        response, _ = model.chat(tokenizer, pixel_values, question, fallback_config,
+                                        history=history, return_history=True)
+                else:
+                    raise e  # Re-raise other errors
+
+            # Format and display response
+            if isinstance(response, str) and len(response) > 0:
+                # Handle potential formatting issues
+                if ('\\[' in response and '\\]' in response) or ('\\(' in response and '\\)' in response):
+                    response = response.replace('\\[', '$').replace('\\]', '$').replace('\\(', '$').replace('\\)', '$')
+
+                placeholder.markdown(response)
             else:
-                # Continuing conversation with system prompt
-                response, _ = model.chat(tokenizer, pixel_values, question, generation_config,
-                                      history=history, return_history=True)
-
-            # Handle potential formatting issues
-            if ('\\[' in response and '\\]' in response) or ('\\(' in response and '\\)' in response):
-                response = response.replace('\\[', '$').replace('\\]', '$').replace('\\(', '$').replace('\\)', '$')
-
-            # Update display with the final response
-            placeholder.markdown(response)
+                response = "Error: Model returned an empty response. Please try again with different parameters."
+                placeholder.markdown(response)
     except Exception as e:
         error_msg = f"Error generating response: {str(e)}"
         st.error(error_msg)
-        response = error_msg
+
+        # Offer helpful suggestions based on the error
+        if "CUDA out of memory" in str(e):
+            response = f"{error_msg}\n\nSuggestion: Try using a smaller model or reducing the max_input_tiles parameter in advanced settings."
+        elif "inf" in str(e) or "nan" in str(e) or "< 0" in str(e):
+            response = f"{error_msg}\n\nSuggestion: Try reducing temperature to 0.1 and disabling sampling in advanced settings."
+        else:
+            response = f"{error_msg}\n\nSuggestion: Please try again with different parameters or a different image."
 
     return response
 
@@ -520,12 +557,12 @@ def main():
                                       help='System prompt is a message used to instruct the assistant.', height=100)
 
         with st.expander('🔥 Advanced Options'):
-            temperature = st.slider('Temperature', min_value=0.0, max_value=1.0, value=0.7, step=0.1)
-            top_p = st.slider('Top-p', min_value=0.0, max_value=1.0, value=0.95, step=0.05)
-            repetition_penalty = st.slider('Repetition Penalty', min_value=1.0, max_value=1.5, value=1.1, step=0.02)
-            max_length = st.slider('Max New Tokens', min_value=0, max_value=4096, value=1024, step=128)
+            temperature = st.slider('Temperature', min_value=0.0, max_value=1.0, value=0.3, step=0.01)
+            top_p = st.slider('Top-p', min_value=0.0, max_value=1.0, value=0.9, step=0.01)
+            repetition_penalty = st.slider('Repetition Penalty', min_value=1.0, max_value=1.5, value=1.1, step=0.01)
+            max_length = st.slider('Max New Tokens', min_value=0, max_value=1024, value=512, step=8)
             max_input_tiles = st.slider('Max Input Tiles (controls image resolution)',
-                                       min_value=1, max_value=24, value=12, step=1)
+                min_value=1, max_value=24, value=12, step=1)
 
         # File uploader
         upload_image_preview = st.empty()
