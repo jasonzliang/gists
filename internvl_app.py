@@ -503,12 +503,12 @@ def main():
         lan = st.selectbox('Language / 语言', ['English', '中文'],
             help='This is only for switching the UI language.')
 
-        # if lan == 'English':
-        #     system_message_default = 'I am InternVL3, a multimodal large language model developed by OpenGVLab.'
-        #     system_message_editable = 'Please answer the user questions in detail.'
-        # else:
-        system_message_default = '我是书生·万象，英文名是InternVL，是由上海人工智能实验室、清华大学及多家合作单位联合开发的多模态大语言模型。'
-        system_message_editable = '请尽可能详细地回答用户的问题。'
+        if lan == 'English':
+            system_message_default = 'I am InternVL3, a multimodal large language model developed by OpenGVLab.'
+            system_message_editable = 'Please answer the user questions in detail.'
+        else:
+            system_message_default = '我是书生·万象，英文名是InternVL，是由上海人工智能实验室、清华大学及多家合作单位联合开发的多模态大语言模型。'
+            system_message_editable = '请尽可能详细地回答用户的问题。'
 
         model_options = [
             "OpenGVLab/InternVL3-1B",
@@ -552,9 +552,19 @@ def main():
             st.session_state.current_model_path = model_path
             st.session_state.needs_rerun = True
 
+        # Add this checkbox for empty system prompt
+        use_empty_system_prompt = st.checkbox('Use empty system prompt',
+            help='Check this to use an empty string as system prompt instead of the default.')
+
         with st.expander('🤖 System Prompt'):
-            system_message_editable = st.text_area('System Prompt', value=system_message_editable,
-                                      help='System prompt is a message used to instruct the assistant.', height=100)
+            if not use_empty_system_prompt:
+                # Only show and use the text area if checkbox is not checked
+                system_message_editable = st.text_area('System Prompt', value=system_message_editable,
+                    help='System prompt is a message used to instruct the assistant.', height=100)
+            else:
+                # Display a message indicating empty system prompt is being used
+                st.info('Using empty system prompt. Uncheck the option above to use a custom prompt.')
+                # Set system message to empty string
 
         with st.expander('🔥 Advanced Options'):
             temperature = st.slider('Temperature', min_value=0.0, max_value=1.0, value=0.3, step=0.01)
@@ -606,7 +616,7 @@ def main():
                 st.stop()
 
     # Initialize system prompt
-    if len(st.session_state.messages) == 0:
+    if len(st.session_state.messages) == 0 and not use_empty_system_prompt:
         st.session_state.messages.append(
             {'role': 'system', 'content': system_message_default + '\n\n' + system_message_editable})
 
