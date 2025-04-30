@@ -361,6 +361,7 @@ if uploaded_file is not None:
         st.session_state.short_caption = None
         st.session_state.normal_caption = None
         st.session_state.long_caption = None
+        st.session_state.model_loaded = False
 
     # Load image
     image = Image.open(uploaded_file)
