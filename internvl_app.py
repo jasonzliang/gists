@@ -469,7 +469,7 @@ def main():
 
         lan = st.selectbox('Language / 语言', ['English', '中文'],
             help='This is only for switching the UI language.')
-        if lan != 'English':
+        if lan == '中文':
             system_message_default = \
                 '我是书生·万象，英文名是InternVL，是由上海人工智能实验室、清华大学及多家合作单位联合开发的多模态大语言模型。'
             system_message_editable = '请尽可能详细地回答用户的问题。'
