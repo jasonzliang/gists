@@ -177,6 +177,8 @@ cython_debug/
 .tags*
 .DS_Store
 .streamlit
+internvl_logs
 moondream_custom
 output
 stream
+
