@@ -450,10 +450,6 @@ def main():
     if 'messages' not in st.session_state.keys():
         st.session_state.messages = []
 
-    system_message_default = \
-        'I am InternVL3, a multimodal large language model developed by OpenGVLab.'
-    system_message_editable = 'Please answer the user questions in detail.'
-
     # Sidebar for settings
     with st.sidebar:
         st.title("InternVL3 Chat Demo")
