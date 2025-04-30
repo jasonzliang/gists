@@ -6,6 +6,7 @@ import random
 import re
 import time
 import hashlib
+import glob
 from io import BytesIO
 
 import cv2
@@ -455,6 +456,30 @@ def save_chat_history(messages, model_name):
     fout.write(json.dumps(data, ensure_ascii=False) + '\n')
     fout.close()
 
+def clear_logs_and_images():
+    """Delete log files and images in the LOGDIR when clearing history"""
+    try:
+        # Delete log files
+        log_files = glob.glob(os.path.join(LOGDIR, '*.json'))
+        for file in log_files:
+            os.remove(file)
+
+        # Delete image directories
+        image_dir = os.path.join(LOGDIR, 'serve_images')
+        if os.path.exists(image_dir):
+            date_dirs = glob.glob(os.path.join(image_dir, '*'))
+            for dir_path in date_dirs:
+                # Delete all files in the directory
+                for image_file in glob.glob(os.path.join(dir_path, '*')):
+                    os.remove(image_file)
+                # Remove the empty directory
+                os.rmdir(dir_path)
+
+        return True
+    except Exception as e:
+        st.error(f"Error clearing logs and images: {str(e)}")
+        return False
+
 def resize_image_to_max_pixels(img, max_pixels=1000000):
     """Resize an image to have approximately max_pixels while maintaining aspect ratio"""
     width, height = img.size
@@ -603,7 +628,7 @@ def main():
                     st.warning(f"Error unloading previous model: {str(e)}")
 
                 # Short delay to ensure resources are released
-                time.sleep(0.5)
+                time.sleep(1)
 
             # Remove from session state
             st.session_state.pop('model', None)
@@ -653,10 +678,25 @@ def main():
                 Library(uploaded_pil_images)
 
         # Clear history button
-        clear_history = st.button('Clear Chat History')
+        clear_history = st.button('Clear chat history, logs, images')
         if clear_history:
+            # Clear messages
             st.session_state.messages = []
             st.session_state.uploader_key += 1
+
+            # Show a message while clearing logs
+            with st.spinner("Clearing logs and images..."):
+                success = clear_logs_and_images()
+
+            if success:
+                st.success("Chat history, logs, and images cleared successfully!")
+            else:
+                st.error("Failed to clear some logs or images. See console for details.")
+
+            # Short delay to ensure user can see success or error msg
+            time.sleep(1)
+
+            # Force a rerun to update the UI
             st.session_state.needs_rerun = True
 
     # Main content area
