@@ -627,6 +627,7 @@ def main():
                 # Display a message indicating empty system prompt is being used
                 st.info('Using empty system prompt. Uncheck the option above to use a custom prompt.')
                 # Set system message to empty string
+                st.session_state.messages = []
 
         with st.expander('🔥 Advanced Options'):
             temperature = st.slider('Temperature', min_value=0.0, max_value=1.0, value=0.3, step=0.01)
