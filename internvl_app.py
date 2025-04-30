@@ -27,7 +27,7 @@ sys.modules["torch.classes"] = dummy_module
 # Constants for image processing
 IMAGENET_MEAN = (0.485, 0.456, 0.406)
 IMAGENET_STD = (0.229, 0.224, 0.225)
-LOGDIR = "internvl_logs"  # Directory for storing logs
+LOGDIR = "internvl_dir"  # Directory for storing logs
 
 # Create log directory if it doesn't exist
 os.makedirs(LOGDIR, exist_ok=True)

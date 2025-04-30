@@ -40,10 +40,10 @@ st.set_page_config(
 )
 
 # Create custom module for vision fixes
-os.makedirs("./moondream_custom", exist_ok=True)
+os.makedirs("./moondream_dir", exist_ok=True)
 
 # Write the fixed vision.py file
-with open("./moondream_custom/vision.py", "w") as f:
+with open("./moondream_dir/vision.py", "w") as f:
     f.write("""
 # Modified vision.py with device handling fix
 import torch
@@ -93,7 +93,7 @@ def vision_projection(global_features, reconstructed, vision_config, config):
 """)
 
 # Create __init__.py
-with open("./moondream_custom/__init__.py", "w") as f:
+with open("./moondream_dir/__init__.py", "w") as f:
     f.write("# Custom moondream module")
 
 # Add directory to Python path
@@ -185,7 +185,7 @@ def load_model():
         from transformers import AutoModelForCausalLM
 
         # Modify sys.modules to use custom vision.py
-        from moondream_custom import vision
+        from moondream_dir import vision
         sys.modules["vision"] = vision
 
         # Determine best device
@@ -217,7 +217,7 @@ def load_model():
                 def patched_vis_proj(self, g, r):
                     if g.device != r.device:
                         r = r.to(g.device)
-                    from moondream_custom.vision import vision_projection
+                    from moondream_dir.vision import vision_projection
                     return vision_projection(g, r, self.vision, self.config.vision)
 
                 model._vis_proj = types.MethodType(patched_vis_proj, model)
