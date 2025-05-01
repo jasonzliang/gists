@@ -303,10 +303,11 @@ def generate_response(messages, model, tokenizer, max_length, temperature, top_p
 
     # Prepare conversation history
     history = None
-    if not st.session_state.get('reset_history', False) and len(messages) > 2:
+    if not st.session_state.get('reset_history', False) and len(messages) > 1:  # Changed from > 2
         history = []
+        start_idx = 0 if st.session_state.get('use_empty_system_prompt', False) else 1
         # Format history according to the reference implementation
-        for i in range(1, len(messages) - 1, 2):
+        for i in range(start_idx, len(messages) - 1, 2):
             if i + 1 < len(messages):
                 history.append([messages[i]['content'], messages[i+1]['content']])
 
@@ -549,7 +550,7 @@ def load_upload_file_and_show(uploaded_files):
         img = Image.fromarray(img)
 
         # Resize if necessary
-        # img = resize_image_to_max_pixels(img, max_pixels=1000000)
+        img = resize_image_to_max_pixels(img, max_pixels=1000000)
         images.append(img)
 
     # Generate filenames using hash
