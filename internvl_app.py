@@ -1,5 +1,6 @@
 import datetime
 import json
+import gc
 import os
 import sys
 import random
@@ -8,39 +9,77 @@ import time
 import hashlib
 import glob
 from io import BytesIO
+from pathlib import Path
+from functools import lru_cache
 
 import cv2
 import numpy as np
 import streamlit as st
 from PIL import Image, ImageDraw, ImageFont
 
-import math
+import torch
 import torchvision.transforms as T
 from torchvision.transforms.functional import InterpolationMode
 from transformers import AutoModel, AutoTokenizer, AutoConfig
 
 # Fix for torch.classes error
-import torch
 import types
-dummy_module = types.ModuleType("dummy_classes")
-dummy_module.__path__ = []
-sys.modules["torch.classes"] = dummy_module
+sys.modules["torch.classes"] = types.ModuleType("dummy_classes")
+sys.modules["torch.classes"].__path__ = []
 
-# Register the AVIF/HEIF file format plugin
+# Register image format plugins
 import pillow_avif
 import pillow_heif
 pillow_heif.register_heif_opener()
 
-# Constants for image processing
+# Constants
 IMAGENET_MEAN = (0.485, 0.456, 0.406)
 IMAGENET_STD = (0.229, 0.224, 0.225)
-LOGDIR = "internvl_dir"  # Directory for storing logs
+LOGDIR = "internvl_dir"
 
-# Create log directory if it doesn't exist
+# Create log directories
 os.makedirs(LOGDIR, exist_ok=True)
 os.makedirs(os.path.join(LOGDIR, 'serve_images'), exist_ok=True)
 
-# Check for available devices
+# Utility Functions
+def debug_print_state(message, show_contents=False):
+    """Print debug info about the current session state"""
+    print(f"DEBUG: {message}")
+    if 'messages' in st.session_state:
+        msg_count = len(st.session_state.messages)
+        print(f"Message count: {msg_count}")
+        if msg_count > 0 and show_contents:
+            print(f"First message role: {st.session_state.messages[0]['role']}")
+            print(f"First message content: {st.session_state.messages[0]['content'][:100]}...")
+
+def log_state_change(event_name):
+    """Log important state changes for debugging"""
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    msg_count = len(st.session_state.get('messages', []))
+
+    with open(os.path.join(LOGDIR, "debug_log.txt"), 'a') as f:
+        f.write(f"[{timestamp}] {event_name}: Messages={msg_count}, Model={'model' in st.session_state}\n")
+
+def reset_chat_context():
+    """Reset the chat context when needed, but preserve system message"""
+    if 'messages' not in st.session_state:
+        st.session_state.messages = []
+        return
+
+    # Keep only the system message if it exists
+    if st.session_state.messages and st.session_state.messages[0]['role'] == 'system':
+        system_msg = st.session_state.messages[0]
+        st.session_state.messages = [system_msg]
+    else:
+        st.session_state.messages = []
+
+        # Re-add system message if not using empty prompt
+        if not st.session_state.get('use_empty_system_prompt', False):
+            system_content = (st.session_state.get('system_message_default', 'I am InternVL3, a multimodal large language model.') +
+                            '\n\n' +
+                            st.session_state.get('system_message_editable', 'Please answer the user questions in detail.'))
+            st.session_state.messages.append({'role': 'system', 'content': system_content})
+
 def get_device():
     """Determine the best available device (CUDA, MPS, or CPU)"""
     if torch.cuda.is_available():
@@ -50,54 +89,61 @@ def get_device():
     else:
         return "cpu"
 
-# Image processing functions
+# Image Processing
 def build_transform(input_size):
-    MEAN, STD = IMAGENET_MEAN, IMAGENET_STD
-    transform = T.Compose([
+    """Build image transformation pipeline"""
+    return T.Compose([
         T.Lambda(lambda img: img.convert('RGB') if img.mode != 'RGB' else img),
         T.Resize((input_size, input_size), interpolation=InterpolationMode.BICUBIC),
         T.ToTensor(),
-        T.Normalize(mean=MEAN, std=STD)
+        T.Normalize(mean=IMAGENET_MEAN, std=IMAGENET_STD)
     ])
-    return transform
 
 def find_closest_aspect_ratio(aspect_ratio, target_ratios, width, height, image_size):
+    """Find closest aspect ratio for image tiling"""
     best_ratio_diff = float('inf')
     best_ratio = (1, 1)
     area = width * height
+
     for ratio in target_ratios:
         target_aspect_ratio = ratio[0] / ratio[1]
         ratio_diff = abs(aspect_ratio - target_aspect_ratio)
+
         if ratio_diff < best_ratio_diff:
             best_ratio_diff = ratio_diff
             best_ratio = ratio
-        elif ratio_diff == best_ratio_diff:
-            if area > 0.5 * image_size * image_size * ratio[0] * ratio[1]:
-                best_ratio = ratio
+        elif ratio_diff == best_ratio_diff and area > 0.5 * image_size * image_size * ratio[0] * ratio[1]:
+            best_ratio = ratio
+
     return best_ratio
 
 def dynamic_preprocess(image, min_num=1, max_num=12, image_size=448, use_thumbnail=False):
+    """Preprocess image with dynamic tiling based on aspect ratio"""
     orig_width, orig_height = image.size
     aspect_ratio = orig_width / orig_height
 
-    # calculate the existing image aspect ratio
+    # Calculate possible aspect ratios
     target_ratios = set(
-        (i, j) for n in range(min_num, max_num + 1) for i in range(1, n + 1) for j in range(1, n + 1) if
-        i * j <= max_num and i * j >= min_num)
+        (i, j) for n in range(min_num, max_num + 1)
+        for i in range(1, n + 1)
+        for j in range(1, n + 1)
+        if i * j <= max_num and i * j >= min_num
+    )
     target_ratios = sorted(target_ratios, key=lambda x: x[0] * x[1])
 
-    # find the closest aspect ratio to the target
+    # Find closest aspect ratio
     target_aspect_ratio = find_closest_aspect_ratio(
         aspect_ratio, target_ratios, orig_width, orig_height, image_size)
 
-    # calculate the target width and height
+    # Calculate target dimensions
     target_width = image_size * target_aspect_ratio[0]
     target_height = image_size * target_aspect_ratio[1]
     blocks = target_aspect_ratio[0] * target_aspect_ratio[1]
 
-    # resize the image
+    # Resize and split the image
     resized_img = image.resize((target_width, target_height))
     processed_images = []
+
     for i in range(blocks):
         box = (
             (i % (target_width // image_size)) * image_size,
@@ -105,53 +151,64 @@ def dynamic_preprocess(image, min_num=1, max_num=12, image_size=448, use_thumbna
             ((i % (target_width // image_size)) + 1) * image_size,
             ((i // (target_width // image_size)) + 1) * image_size
         )
-        # split the image
-        split_img = resized_img.crop(box)
-        processed_images.append(split_img)
-    assert len(processed_images) == blocks
-    if use_thumbnail and len(processed_images) != 1:
+        processed_images.append(resized_img.crop(box))
+
+    # Add thumbnail if needed
+    if use_thumbnail and len(processed_images) > 1:
         thumbnail_img = image.resize((image_size, image_size))
         processed_images.append(thumbnail_img)
+
     return processed_images
 
 def load_image(image_file, input_size=448, max_num=12):
+    """Load and transform image for model input"""
     if isinstance(image_file, str):
         image = Image.open(image_file).convert('RGB')
     else:
         image = image_file
+
     transform = build_transform(input_size=input_size)
     images = dynamic_preprocess(image, image_size=input_size, use_thumbnail=True, max_num=max_num)
-    pixel_values = [transform(image) for image in images]
-    pixel_values = torch.stack(pixel_values)
+    pixel_values = torch.stack([transform(image) for image in images])
+
     return pixel_values
 
-# Add this function to detect CUDA availability more safely
-def is_cuda_available():
-    """Safely check if CUDA is available without triggering errors"""
-    try:
-        return torch.cuda.is_available()
-    except:
-        return False
+def process_image(image, max_num=12):
+    """Process image for model input with device-specific handling"""
+    device = get_device()
+    img_pixel_values = load_image(image, input_size=448, max_num=max_num)
 
-# Modified get_device function with better error handling
-def get_device():
-    """Determine the best available device (CUDA, MPS, or CPU) with better error handling"""
-    if is_cuda_available():
-        return "cuda"
-    elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
-        return "mps"
+    # Handle device placement and precision
+    if device == "mps":
+        try:
+            img_pixel_values = img_pixel_values.to(torch.float16).to(device)
+        except Exception as e:
+            print(f"Warning: Could not use float16 on MPS: {str(e)}. Falling back to float32.")
+            img_pixel_values = img_pixel_values.to(torch.float32).to(device)
+    elif device == "cuda":
+        img_pixel_values = img_pixel_values.to(torch.float16).to(device)
     else:
-        return "cpu"
+        img_pixel_values = img_pixel_values.to(torch.float32)
 
-# Modified model loading function to handle device-specific settings
-@st.cache_resource
+    # Handle NaN/Inf values
+    if torch.isnan(img_pixel_values).any() or torch.isinf(img_pixel_values).any():
+        img_pixel_values = torch.nan_to_num(img_pixel_values, nan=0.0, posinf=1.0, neginf=-1.0)
+
+    return img_pixel_values
+
+# Model Loading
+@st.cache_resource(show_spinner=False)
 def load_model(model_path):
-    """Load the InternVL model with proper device handling"""
+    """Load the InternVL model with proper device handling
+
+    This function is cached with @st.cache_resource to ensure the model is
+    only loaded once per model_path, preventing duplicate loading.
+    """
     try:
         device = get_device()
         config = AutoConfig.from_pretrained(model_path, trust_remote_code=True)
 
-        # Common arguments that work across devices
+        # Common arguments for model loading
         common_args = {
             "low_cpu_mem_usage": True,
             "trust_remote_code": True
@@ -160,24 +217,20 @@ def load_model(model_path):
         if device == "mps":
             st.info("Loading model on Apple Silicon GPU (MPS)")
 
-            # Disable CUDA-specific features
+            # Configure for MPS
             model_args = {
                 **common_args,
-                "torch_dtype": torch.float16,  # Try float16 first
-                "use_flash_attn": False,       # Disable flash attention on MPS
-                "device_map": None             # Don't use device_map on MPS
+                "torch_dtype": torch.float16,
+                "use_flash_attn": False,
+                "device_map": None
             }
 
             try:
-                # Load model without device_map
                 model = AutoModel.from_pretrained(model_path, **model_args)
-                # Then explicitly move to MPS
                 model = model.to("mps").eval()
                 st.success("Model loaded in float16 on MPS")
             except Exception as e:
                 st.warning(f"Could not load model in float16: {str(e)}. Trying float32.")
-
-                # Try again with float32
                 model_args["torch_dtype"] = torch.float32
                 model = AutoModel.from_pretrained(model_path, **model_args)
                 model = model.to("mps").eval()
@@ -190,7 +243,7 @@ def load_model(model_path):
                 **common_args,
                 "torch_dtype": torch.float16,
                 "use_flash_attn": True,
-                "device_map": "auto"  # Use auto device mapping for CUDA
+                "device_map": "auto"
             }
 
             model = AutoModel.from_pretrained(model_path, **model_args).eval()
@@ -209,70 +262,26 @@ def load_model(model_path):
         # Load tokenizer
         tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True, use_fast=False)
 
+        print(f"Model {model_path} loaded successfully via cache_resource decorator")
         return model, tokenizer
     except Exception as e:
         st.error(f"Failed to load model: {str(e)}")
         return None, None
 
-# Simple library component to display images
-class Library:
-    def __init__(self, images):
-        if not images:
-            return
-
-        num_images = len(images)
-        cols = min(num_images, 4)  # Maximum 4 columns
-        rows = (num_images + cols - 1) // cols
-
-        for i in range(rows):
-            row_cols = st.columns(cols)
-            for j in range(cols):
-                idx = i * cols + j
-                if idx < num_images:
-                    with row_cols[j]:
-                        st.image(images[idx], use_container_width=True)
-
-# Additional changes for proper image processing on MPS
-def process_image(image, max_num=12):
-    """Process an image specifically for MPS without CUDA dependencies"""
-    device = get_device()
-
-    img_pixel_values = load_image(image, input_size=448, max_num=max_num)
-    # # Use the same image processing pipeline as in the reference code
-    # transform = build_transform(input_size=448)
-    # img_tiles = dynamic_preprocess(image, image_size=448, use_thumbnail=True, max_num=max_num)
-
-    # # Transform each tile
-    # img_pixel_values = [transform(tile) for tile in img_tiles]
-    # img_pixel_values = torch.stack(img_pixel_values)
-
-    # Handle device placement and precision
-    if device == "mps":
-        try:
-            img_pixel_values = img_pixel_values.to(torch.float16).to(device)
-        except Exception as e:
-            print(f"Warning: Could not use float16 on MPS: {str(e)}. Falling back to float32.")
-            img_pixel_values = img_pixel_values.to(torch.float32).to(device)
-    elif device == "cpu":
-        img_pixel_values = img_pixel_values.to(torch.float32)
-
-    # Check for NaN/Inf values
-    if torch.isnan(img_pixel_values).any() or torch.isinf(img_pixel_values).any():
-        img_pixel_values = torch.nan_to_num(img_pixel_values, nan=0.0, posinf=1.0, neginf=-1.0)
-
-    return img_pixel_values
-
-# Modified generate_response function with CUDA-specific code removed
+# Response Generation
 def generate_response(messages, model, tokenizer, max_length, temperature, top_p, repetition_penalty, max_input_tiles):
-    """Generate a response using the InternVL model with proper MPS handling"""
+    """Generate a response using the InternVL model"""
     placeholder = st.empty()
-    device = get_device()
+
+    # Ensure model is in eval mode
+    if not model.training:
+        model.eval()
 
     # Process images from the latest user message if any
     pixel_values = None
     num_patches_list = None
 
-    if messages[-1]['role'] == 'user' and 'image' in messages[-1] and len(messages[-1]['image']) > 0:
+    if messages[-1]['role'] == 'user' and 'image' in messages[-1] and messages[-1]['image']:
         with st.status("Processing images..."):
             try:
                 # Get all images from the user's message
@@ -282,10 +291,7 @@ def generate_response(messages, model, tokenizer, max_length, temperature, top_p
 
                 # Process each image
                 for img in images:
-                    # Use MPS-specific processing function
                     img_pixel_values = process_image(img, max_num=max_input_tiles)
-
-                    # Track number of patches for this image
                     num_patches_list.append(img_pixel_values.size(0))
                     all_pixel_values.append(img_pixel_values)
 
@@ -293,7 +299,7 @@ def generate_response(messages, model, tokenizer, max_length, temperature, top_p
                 if all_pixel_values:
                     pixel_values = torch.cat(all_pixel_values, dim=0)
 
-                    # Add image indicators to the prompt if there are multiple images
+                    # Add image indicators for multiple images
                     if len(images) > 1:
                         image_prefix = ''.join([f'Image-{i+1}: <image>\n' for i in range(len(images))])
                         messages[-1]['content'] = image_prefix + messages[-1]['content']
@@ -303,12 +309,16 @@ def generate_response(messages, model, tokenizer, max_length, temperature, top_p
 
     # Prepare conversation history
     history = None
-    if len(messages) > 2:
+    if not st.session_state.get('reset_history', False) and len(messages) > 2:
         history = []
         # Format history according to the reference implementation
         for i in range(1, len(messages) - 1, 2):
             if i + 1 < len(messages):
                 history.append([messages[i]['content'], messages[i+1]['content']])
+
+    # Reset the flag after using it
+    if st.session_state.get('reset_history', False):
+        st.session_state.reset_history = False
 
     # Configure generation parameters
     generation_config = {
@@ -337,7 +347,7 @@ def generate_response(messages, model, tokenizer, max_length, temperature, top_p
                     if num_patches_list and len(num_patches_list) > 1:
                         # For multiple images
                         response = model.chat(tokenizer, pixel_values, question, generation_config,
-                                             num_patches_list=num_patches_list)
+                                           num_patches_list=num_patches_list)
                     else:
                         # For single image or no image
                         response = model.chat(tokenizer, pixel_values, question, generation_config)
@@ -346,12 +356,12 @@ def generate_response(messages, model, tokenizer, max_length, temperature, top_p
                     if num_patches_list and len(num_patches_list) > 1:
                         # For multiple images
                         response, _ = model.chat(tokenizer, pixel_values, question, generation_config,
-                                               num_patches_list=num_patches_list,
-                                               history=history, return_history=True)
+                                              num_patches_list=num_patches_list,
+                                              history=None, return_history=True)
                     else:
                         # For single image or no image
                         response, _ = model.chat(tokenizer, pixel_values, question, generation_config,
-                                               history=history, return_history=True)
+                                              history=None, return_history=True)
             except RuntimeError as e:
                 # Handle probability tensor error
                 if "inf" in str(e) or "nan" in str(e) or "< 0" in str(e):
@@ -368,7 +378,7 @@ def generate_response(messages, model, tokenizer, max_length, temperature, top_p
                         response = model.chat(tokenizer, pixel_values, question, fallback_config)
                     else:
                         response, _ = model.chat(tokenizer, pixel_values, question, fallback_config,
-                                              history=history, return_history=True)
+                                             history=None, return_history=True)
                 else:
                     raise e
 
@@ -381,98 +391,135 @@ def generate_response(messages, model, tokenizer, max_length, temperature, top_p
 
     return response
 
+# UI Components
+class Library:
+    """Simple component to display multiple images in a grid"""
+    def __init__(self, images):
+        if not images:
+            return
+
+        num_images = len(images)
+        cols = min(num_images, 4)  # Maximum 4 columns
+        rows = (num_images + cols - 1) // cols
+
+        for i in range(rows):
+            row_cols = st.columns(cols)
+            for j in range(cols):
+                idx = i * cols + j
+                if idx < num_images:
+                    with row_cols[j]:
+                        st.image(images[idx], use_container_width=True)
+
 def find_bounding_boxes(response, messages):
-    """Process bounding box annotations in the response"""
+    """Extract and visualize bounding boxes from model response"""
     pattern = re.compile(r'<ref>\s*(.*?)\s*</ref>\s*<box>\s*(\[\[.*?\]\])\s*</box>')
     matches = pattern.findall(response)
-    results = []
-    for match in matches:
-        results.append((match[0], eval(match[1])))
 
-    returned_image = None
-    for message in messages:
-        if message['role'] == 'user' and 'image' in message and len(message['image']) > 0:
-            last_image = message['image'][-1]
-            width, height = last_image.size
-            returned_image = last_image.copy()
-            draw = ImageDraw.Draw(returned_image)
-
-    if not returned_image or not results:
+    if not matches:
         return None
 
-    for result in results:
-        line_width = max(1, int(min(width, height) / 200))
-        random_color = (random.randint(0, 128), random.randint(0, 128), random.randint(0, 128))
-        category_name, coordinates = result
-        coordinates = [(float(x[0]) / 1000, float(x[1]) / 1000, float(x[2]) / 1000, float(x[3]) / 1000) for x in coordinates]
-        coordinates = [(int(x[0] * width), int(x[1] * height), int(x[2] * width), int(x[3] * height)) for x in coordinates]
+    # Find the last image used
+    last_image = None
+    for message in messages:
+        if message['role'] == 'user' and 'image' in message and message['image']:
+            last_image = message['image'][-1]
 
-        for box in coordinates:
-            # Draw rectangle and label
-            draw.rectangle(box, outline=random_color, width=line_width)
-            # Try to load a default font or use a simple font
+    if not last_image:
+        return None
+
+    # Create a copy to draw on
+    returned_image = last_image.copy()
+    draw = ImageDraw.Draw(returned_image)
+    width, height = returned_image.size
+    line_width = max(1, int(min(width, height) / 200))
+
+    # Draw each bounding box
+    for category_name, coordinates in matches:
+        # Generate a random color
+        color = (random.randint(0, 128), random.randint(0, 128), random.randint(0, 128))
+
+        # Process coordinates
+        coordinates = eval(coordinates)
+
+        # Convert from normalized to pixel coordinates
+        pixel_coords = [
+            (int(x[0] * width / 1000), int(x[1] * height / 1000),
+             int(x[2] * width / 1000), int(x[3] * height / 1000))
+            for x in coordinates
+        ]
+
+        # Draw each box
+        for box in pixel_coords:
+            # Draw rectangle
+            draw.rectangle(box, outline=color, width=line_width)
+
+            # Try to load font
             try:
                 font = ImageFont.truetype('Arial.ttf', int(20 * line_width / 2))
             except:
                 font = ImageFont.load_default()
 
-            text_width, text_height = font.getsize(category_name) if hasattr(font, 'getsize') else (len(category_name) * 8, 12)
-            text_position = (box[0], max(0, box[1] - text_height))
+            # Get text dimensions
+            text_width = len(category_name) * 8
+            text_height = 12
+            if hasattr(font, 'getsize'):
+                text_width, text_height = font.getsize(category_name)
 
-            # Background for text
+            # Draw text background
+            text_position = (box[0], max(0, box[1] - text_height))
             draw.rectangle(
                 [text_position, (text_position[0] + text_width, text_position[1] + text_height)],
-                fill=random_color
+                fill=color
             )
+
             # Draw text
             draw.text(text_position, category_name, fill='white', font=font)
 
     return returned_image
 
+# File and Image Handling
 def get_conv_log_filename():
     """Generate a filename for saving conversation logs"""
     t = datetime.datetime.now()
-    name = os.path.join(LOGDIR, f'{t.year}-{t.month:02d}-{t.day:02d}-conv.json')
-    return name
+    return os.path.join(LOGDIR, f'{t.year}-{t.month:02d}-{t.day:02d}-conv.json')
 
 def save_chat_history(messages, model_name):
     """Save the conversation history to a log file"""
     if not messages:
         return
 
-    new_messages = []
+    # Create a simplified copy of messages for logging
+    log_messages = []
     for message in messages:
-        new_message = {'role': message['role'], 'content': message['content']}
+        log_message = {'role': message['role'], 'content': message['content']}
         if 'filenames' in message:
-            new_message['filenames'] = message['filenames']
-        new_messages.append(new_message)
+            log_message['filenames'] = message['filenames']
+        log_messages.append(log_message)
 
-    fout = open(get_conv_log_filename(), 'a')
-    data = {
-        'type': 'chat',
-        'model': model_name,
-        'messages': new_messages,
-    }
-    fout.write(json.dumps(data, ensure_ascii=False) + '\n')
-    fout.close()
+    # Write to log file
+    with open(get_conv_log_filename(), 'a') as f:
+        json.dump({
+            'type': 'chat',
+            'model': model_name,
+            'messages': log_messages,
+        }, f, ensure_ascii=False)
+        f.write('\n')
 
 def clear_logs_and_images():
-    """Delete log files and images in the LOGDIR when clearing history"""
+    """Delete log files and saved images"""
     try:
         # Delete log files
-        log_files = glob.glob(os.path.join(LOGDIR, '*.json'))
-        for file in log_files:
+        for file in glob.glob(os.path.join(LOGDIR, '*.json')):
             os.remove(file)
 
         # Delete image directories
         image_dir = os.path.join(LOGDIR, 'serve_images')
         if os.path.exists(image_dir):
-            date_dirs = glob.glob(os.path.join(image_dir, '*'))
-            for dir_path in date_dirs:
-                # Delete all files in the directory
+            for dir_path in glob.glob(os.path.join(image_dir, '*')):
+                # Delete files in the directory
                 for image_file in glob.glob(os.path.join(dir_path, '*')):
                     os.remove(image_file)
-                # Remove the empty directory
+                # Remove the directory
                 os.rmdir(dir_path)
 
         return True
@@ -495,72 +542,117 @@ def resize_image_to_max_pixels(img, max_pixels=1000000):
     return img.resize((new_width, new_height), Image.LANCZOS)
 
 def load_upload_file_and_show(uploaded_files):
-    """Load uploaded files and display them"""
-    if uploaded_files is not None:
-        images, filenames = [], []
-        for file in uploaded_files:
-            file_bytes = np.asarray(bytearray(file.read()), dtype=np.uint8)
-            img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
-            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            img = Image.fromarray(img)
+    """Load uploaded files, resize if needed, and save them"""
+    if not uploaded_files:
+        return [], []
 
-            # Resize the image if it exceeds 1 million pixels
-            img = resize_image_to_max_pixels(img, max_pixels=1000000)
+    images, filenames = [], []
+    for file in uploaded_files:
+        # Read file bytes
+        file_bytes = np.asarray(bytearray(file.read()), dtype=np.uint8)
+        img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        img = Image.fromarray(img)
 
-            images.append(img)
+        # Resize if necessary
+        img = resize_image_to_max_pixels(img, max_pixels=1000000)
+        images.append(img)
 
-        # Generate filenames for saving
-        image_hashes = [hashlib.md5(image.tobytes()).hexdigest() for image in images]
-        for image, hash_val in zip(images, image_hashes):
-            t = datetime.datetime.now()
-            directory = os.path.join(LOGDIR, 'serve_images', f'{t.year}-{t.month:02d}-{t.day:02d}')
-            os.makedirs(directory, exist_ok=True)
-            filename = os.path.join(directory, f'{hash_val}.jpg')
-            filenames.append(filename)
-            if not os.path.isfile(filename):
-                image.save(filename)
+    # Generate filenames using hash
+    for image in images:
+        image_hash = hashlib.md5(image.tobytes()).hexdigest()
+        t = datetime.datetime.now()
+        directory = os.path.join(LOGDIR, 'serve_images', f'{t.year}-{t.month:02d}-{t.day:02d}')
+        os.makedirs(directory, exist_ok=True)
 
-        return images, filenames
-    return [], []
+        filename = os.path.join(directory, f'{image_hash}.jpg')
+        filenames.append(filename)
+
+        # Save the image if it doesn't exist
+        if not os.path.isfile(filename):
+            image.save(filename)
+
+    return images, filenames
 
 def show_one_or_multiple_images(message, total_image_num, lan='English', is_input=True):
-    """Display images from a message"""
-    if 'image' in message:
-        if is_input:
-            total_image_num = total_image_num + len(message['image'])
-            if lan == 'English':
-                if len(message['image']) == 1 and total_image_num == 1:
-                    label = f"(In this conversation, {len(message['image'])} image was uploaded, {total_image_num} image in total)"
-                elif len(message['image']) == 1 and total_image_num > 1:
-                    label = f"(In this conversation, {len(message['image'])} image was uploaded, {total_image_num} images in total)"
-                else:
-                    label = f"(In this conversation, {len(message['image'])} images were uploaded, {total_image_num} images in total)"
+    """Display images from a message and return updated total"""
+    if 'image' not in message or not message['image']:
+        return total_image_num
+
+    if is_input:
+        # Update total image count
+        new_total = total_image_num + len(message['image'])
+
+        # Create appropriate label based on language
+        if lan == 'English':
+            if len(message['image']) == 1 and new_total == 1:
+                label = f"(In this conversation, {len(message['image'])} image was uploaded, {new_total} image in total)"
+            elif len(message['image']) == 1 and new_total > 1:
+                label = f"(In this conversation, {len(message['image'])} image was uploaded, {new_total} images in total)"
             else:
-                label = f"(在本次对话中，上传了{len(message['image'])}张图片，总共上传了{total_image_num}张图片)"
+                label = f"(In this conversation, {len(message['image'])} images were uploaded, {new_total} images in total)"
+        else:
+            label = f"(在本次对话中，上传了{len(message['image'])}张图片，总共上传了{new_total}张图片)"
 
         # Display images
-        upload_image_preview = st.empty()
-        with upload_image_preview.container():
+        with st.container():
             Library(message['image'])
 
-        if is_input and len(message['image']) > 0:
+        if len(message['image']) > 0:
             st.markdown(label)
 
+        return new_total
+    else:
+        # Just display images for non-input messages
+        with st.container():
+            Library(message['image'])
         return total_image_num
-    return total_image_num
+
+def reset_model_state(model):
+    # Reset img_context_token_id
+    model.img_context_token_id = None
+
+    # If you're in the middle of a conversation and want to start fresh
+    # Reset the conversation template
+    from internvl_helper import get_conv_template
+    model.conv_template = get_conv_template(model.template)
+
+    # Force release of CUDA cache if using GPU
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+    # Ensure model is in eval mode for inference
+    model.eval()
+
+    # Reset any potential hooks
+    for module in model.modules():
+        module._forward_hooks.clear()
+        module._forward_pre_hooks.clear()
+        module._backward_hooks.clear()
+
+    # Clear KV cache
+    if hasattr(model.language_model, 'past_key_values'):
+        model.language_model.past_key_values = None
+
+    # For transformer models, we can reset any module that might contain state
+    for module in model.modules():
+        if hasattr(module, 'past_key_values'):
+            module.past_key_values = None
+        if hasattr(module, 'past_key_value'):
+            module.past_key_value = None
+
+    return model
 
 def main():
-    # App title
+    # App configuration
     st.set_page_config(page_title='InternVL3 Demo', layout="wide")
 
-    # Session state initialization
+    # Initialize session state
     if 'uploader_key' not in st.session_state:
         st.session_state.uploader_key = 0
-
     if 'needs_rerun' not in st.session_state:
         st.session_state.needs_rerun = False
-
-    if 'messages' not in st.session_state.keys():
+    if 'messages' not in st.session_state:
         st.session_state.messages = []
 
     # Sidebar for settings
@@ -576,9 +668,11 @@ def main():
         else:
             st.warning("Using CPU (this will be slow)")
 
+        # Language selection
         lan = st.selectbox('Language / 语言', ['English', '中文'],
-            help='This is only for switching the UI language.')
+                         help='This is only for switching the UI language.')
 
+        # Set default messages based on language
         if lan == 'English':
             system_message_default = 'I am InternVL3, a multimodal large language model developed by OpenGVLab.'
             system_message_editable = 'Please answer the user questions in detail.'
@@ -586,6 +680,7 @@ def main():
             system_message_default = '我是书生·万象，英文名是InternVL，是由上海人工智能实验室、清华大学及多家合作单位联合开发的多模态大语言模型。'
             system_message_editable = '请尽可能详细地回答用户的问题。'
 
+        # Model selection
         model_options = [
             "OpenGVLab/InternVL3-1B",
             "OpenGVLab/InternVL3-2B",
@@ -596,66 +691,88 @@ def main():
             "OpenGVLab/InternVL3-78B"
         ]
         model_path = st.selectbox("Model Selection", model_options, index=4,
-                                 help="Select the InternVL3 model variant to use.")
+                                help="Select the InternVL3 model variant to use.")
 
-        if 'current_model_path' not in st.session_state or st.session_state.current_model_path != model_path:
-            # Explicitly unload the previous model if it exists
+        st.sidebar.markdown("---")
+        st.sidebar.subheader("Model Status")
+        model_status = st.sidebar.empty()
+
+        # Handle model switching with improved checks to prevent double loading
+        need_model_switch = False
+
+        # Check if we need to switch models
+        if 'current_model_path' not in st.session_state:
+            need_model_switch = True
+            print("No current model path - will trigger model load")
+        elif st.session_state.current_model_path != model_path:
+            need_model_switch = True
+            print(f"Model path changed from {st.session_state.current_model_path} to {model_path} - will trigger model load")
+
+        if need_model_switch:
+            # Unload previous model if it exists
             if 'model' in st.session_state:
                 try:
                     # Move model to CPU first if it's on GPU
-                    device = get_device()
-                    if device != "cpu":
+                    current_device = get_device()
+                    if current_device != "cpu":
                         st.session_state.model.to('cpu')
 
-                    # Clear any references that might be holding the model
+                    # Clear references
                     st.session_state.model = None
                     st.session_state.tokenizer = None
-
-                    # Force garbage collection
-                    import gc
                     gc.collect()
 
-                    # Clear device cache if using GPU
-                    if device == "cuda":
+                    # Clear device cache
+                    if current_device == "cuda":
                         torch.cuda.empty_cache()
-                    elif device == "mps":
-                        # MPS doesn't have an explicit cache clear command like CUDA
-                        # but an extra GC can help
-                        gc.collect()
 
-                    st.info("Previous model unloaded successfully")
+                    # Wait a bit to ensure resources are released
+                    time.sleep(1.0)
+
+                    model_status.success("Previous model unloaded successfully")
                 except Exception as e:
-                    st.warning(f"Error unloading previous model: {str(e)}")
+                    model_status.warning(f"Error unloading previous model: {str(e)}")
 
-                # Short delay to ensure resources are released
-                time.sleep(1)
-
-            # Remove from session state
+            # Update model path and trigger rerun
+            # Important: Remove the model from session state so it will be reloaded
             st.session_state.pop('model', None)
             st.session_state.pop('tokenizer', None)
             st.session_state.current_model_path = model_path
             st.session_state.needs_rerun = True
+            print(f"Model switch prepared: will load {model_path} on next rerun")
 
-        # Add this checkbox for empty system prompt
+        # System prompt settings
         use_empty_system_prompt = st.checkbox('Use empty system prompt',
             help='Check this to use an empty string as system prompt instead of the default.')
+        st.session_state.use_empty_system_prompt = use_empty_system_prompt
 
         with st.expander('🤖 System Prompt'):
             if not use_empty_system_prompt:
-                # Only show and use the text area if checkbox is not checked
+                # Show editable system prompt
                 system_message_editable = st.text_area('System Prompt', value=system_message_editable,
                     help='System prompt is a message used to instruct the assistant.', height=100)
-                if len(st.session_state.messages) >= 1 and \
-                    st.session_state.messages[0]['role'] != 'system':
-                    st.session_state.messages = []
+
+                # Store in session state
+                st.session_state.system_message_default = system_message_default
+                st.session_state.system_message_editable = system_message_editable
+
+                # Initialize or update system message
+                if not st.session_state.messages:
+                    # Initialize with system message
+                    st.session_state.messages.append(
+                        {'role': 'system', 'content': system_message_default + '\n\n' + system_message_editable})
+                elif st.session_state.messages[0]['role'] != 'system':
+                    # No system message, but should have one - add it at the beginning
+                    st.session_state.messages.insert(0,
+                        {'role': 'system', 'content': system_message_default + '\n\n' + system_message_editable})
             else:
                 # Display a message indicating empty system prompt is being used
                 st.info('Using empty system prompt. Uncheck the option above to use a custom prompt.')
-                # Set system message to empty string if conversation has not started
-                if len(st.session_state.messages) >= 1 and \
-                    st.session_state.messages[0]['role'] == 'system':
-                    st.session_state.messages = []
+                # Remove system message if present
+                if st.session_state.messages and st.session_state.messages[0]['role'] == 'system':
+                    st.session_state.messages.pop(0)
 
+        # Advanced generation options
         with st.expander('🔥 Advanced Options'):
             temperature = st.slider('Temperature', min_value=0.0, max_value=1.0, value=0.3, step=0.01)
             top_p = st.slider('Top-p', min_value=0.0, max_value=1.0, value=0.9, step=0.01)
@@ -663,6 +780,46 @@ def main():
             max_length = st.slider('Max New Tokens', min_value=0, max_value=1024, value=512, step=8)
             max_input_tiles = st.slider('Max Input Tiles (controls image resolution)',
                 min_value=1, max_value=24, value=12, step=1)
+
+        # Clear history button
+        if st.button('Clear chat history, logs, images'):
+            with st.spinner("Clearing history..."):
+                # Log state before clearing
+                log_state_change("Before clearing history")
+
+                # Save current system prompt before clearing
+                current_system_prompt = ""
+                if st.session_state.messages and st.session_state.messages[0]['role'] == 'system':
+                    current_system_prompt = st.session_state.messages[0]['content']
+                elif not st.session_state.get('use_empty_system_prompt', False):
+                    # Use default if no system prompt exists yet
+                    current_system_prompt = (st.session_state.get('system_message_default', system_message_default) +
+                                           '\n\n' +
+                                           st.session_state.get('system_message_editable', system_message_editable))
+
+                # Call reset_chat_context() to properly clear messages
+                reset_chat_context()
+
+                # Reset model state
+                reset_model_state(st.session_state.model)
+
+                # Set reset_history flag for the response generation
+                st.session_state.reset_history = True
+
+                # Reset file uploader
+                st.session_state.uploader_key += 1
+
+                # Clear logs and images
+                success = clear_logs_and_images()
+
+                if success:
+                    st.success("Chat history, logs, and images cleared successfully!")
+                else:
+                    st.error("Failed to clear some logs or images. See console for details.")
+
+                # Force a rerun to update the UI
+                st.session_state.needs_rerun = True
+            time.sleep(1)
 
         # File uploader
         upload_image_preview = st.empty()
@@ -673,57 +830,51 @@ def main():
 
         uploaded_pil_images, save_filenames = load_upload_file_and_show(uploaded_files)
 
-        if len(uploaded_pil_images) > 0:
+        if uploaded_pil_images:
             with upload_image_preview.container():
                 Library(uploaded_pil_images)
 
-        # Clear history button
-        clear_history = st.button('Clear chat history, logs, images')
-        if clear_history:
-            # Clear messages
-            st.session_state.messages = []
-            st.session_state.uploader_key += 1
-
-            # Show a message while clearing logs
-            with st.spinner("Clearing logs and images..."):
-                success = clear_logs_and_images()
-
-            if success:
-                st.success("Chat history, logs, and images cleared successfully!")
-            else:
-                st.error("Failed to clear some logs or images. See console for details.")
-
-            # Short delay to ensure user can see success or error msg
-            time.sleep(1)
-
-            # Force a rerun to update the UI
-            st.session_state.needs_rerun = True
+        # Debug section
+        with st.sidebar.expander("Debug Information", expanded=False):
+            st.write("Session State Keys:", list(st.session_state.keys()))
+            if st.button('Show Messages'):
+                if 'messages' in st.session_state:
+                    st.write(f"Current messages (length: {len(st.session_state.messages)}):")
+                    if st.session_state.messages:
+                        for msg in st.session_state.messages:
+                            st.write("%s: %s" % (msg["role"], msg["content"][:50]))
 
     # Main content area
     st.title("InternVL3 Chat Demo")
     st.caption("A multimodal large language model for vision-language understanding")
 
-    # Load the model on first run or if requested
+    # Load the model - with additional checks to prevent duplicate loading
+    should_load_model = False
+
+    # Check if we need to load the model
     if 'model' not in st.session_state or 'tokenizer' not in st.session_state:
-        # Check if we're loading a different model than before
-        if 'current_model_path' in st.session_state and st.session_state.current_model_path != model_path:
-            st.info(f"Switched from {st.session_state.current_model_path} to {model_path}")
+        should_load_model = True
+    elif 'current_model_path' in st.session_state and st.session_state.current_model_path != model_path:
+        # We're switching models, but this should already be handled in the sidebar code
+        # This is a safety check in case the sidebar code didn't run properly
+        should_load_model = True
 
-        with st.spinner("Loading InternVL3 model... This may take a few minutes."):
-            model, tokenizer = load_model(model_path)
-            if model is not None and tokenizer is not None:
-                st.session_state.model = model
-                st.session_state.tokenizer = tokenizer
-                st.session_state.current_model_path = model_path  # Save the current model path
-                st.success("Model loaded successfully!")
-            else:
-                st.error("Failed to load model. Please check the model path and try again.")
+    # Only load if needed
+    if should_load_model:
+        with st.spinner(f"Loading {model_path} model... This may take a few minutes."):
+            try:
+                model, tokenizer = load_model(model_path)
+                if model is not None and tokenizer is not None:
+                    st.session_state.model = model
+                    st.session_state.tokenizer = tokenizer
+                    st.session_state.current_model_path = model_path
+                    model_status.success(f"Model {model_path} loaded successfully!")
+                else:
+                    model_status.error("Failed to load model. Please check the model path and try again.")
+                    st.stop()
+            except Exception as e:
+                model_status.error(f"Error loading model: {str(e)}")
                 st.stop()
-
-    # Initialize system prompt
-    if len(st.session_state.messages) == 0 and not use_empty_system_prompt:
-        st.session_state.messages.append(
-            {'role': 'system', 'content': system_message_default + '\n\n' + system_message_editable})
 
     # Display chat messages
     total_image_num = 0
@@ -731,7 +882,7 @@ def main():
         with st.chat_message(message['role']):
             st.markdown(message['content'])
             total_image_num = show_one_or_multiple_images(message, total_image_num, lan=lan,
-                                                         is_input=message['role'] == 'user')
+                                                        is_input=message['role'] == 'user')
 
     # Max image limit check
     max_image_limit = 4  # Maximum number of images allowed
@@ -739,38 +890,56 @@ def main():
 
     # Chat input
     if input_disable_flag:
-        if lan == 'English':
-            prompt = st.chat_input('Too many images have been uploaded. Please clear the history.',
-                                  disabled=input_disable_flag)
-        else:
-            prompt = st.chat_input('输入的图片太多了，请清空历史记录。', disabled=input_disable_flag)
+        prompt_text = 'Too many images have been uploaded. Please clear the history.' if lan == 'English' else '输入的图片太多了，请清空历史记录。'
+        prompt = st.chat_input(prompt_text, disabled=True)
     else:
-        if lan == 'English':
-            prompt = st.chat_input('Send messages to InternVL3')
-        else:
-            prompt = st.chat_input('发送信息给 InternVL3')
+        prompt_text = 'Send messages to InternVL3' if lan == 'English' else '发送信息给 InternVL3'
+        prompt = st.chat_input(prompt_text)
 
     # Handle new message
     if prompt:
         # Add user message to chat
-        image_list = uploaded_pil_images
-        st.session_state.messages.append(
-            {'role': 'user', 'content': prompt, 'image': image_list, 'filenames': save_filenames})
+        st.session_state.messages.append({
+            'role': 'user',
+            'content': prompt,
+            'image': uploaded_pil_images,
+            'filenames': save_filenames
+        })
 
         # Display user message
         with st.chat_message('user'):
             st.write(prompt)
-            show_one_or_multiple_images(st.session_state.messages[-1], total_image_num, lan=lan, is_input=True)
+            total_image_num = show_one_or_multiple_images(st.session_state.messages[-1], total_image_num, lan=lan, is_input=True)
 
         # Reset file uploader
-        if image_list:
+        if uploaded_pil_images:
             st.session_state.uploader_key += 1
             st.session_state.needs_rerun = True
 
     # Generate response if last message is from user
-    if len(st.session_state.messages) > 0 and st.session_state.messages[-1]['role'] == 'user':
+    if st.session_state.messages and st.session_state.messages[-1]['role'] == 'user':
         with st.chat_message('assistant'):
             with st.spinner('InternVL3 is thinking...'):
+
+                # Additional check to ensure we have a valid model and state
+                if 'model' not in st.session_state or 'tokenizer' not in st.session_state:
+                    st.error("Model not loaded properly. Please refresh the page.")
+                    st.stop()
+
+                # Check if the model is in a valid state
+                try:
+                    # Simple check if the model is responsive
+                    model_device = next(st.session_state.model.parameters()).device
+                    print(f"Model is on device: {model_device}")
+                except Exception as e:
+                    st.error(f"Model appears to be in an invalid state: {str(e)}. Please refresh the page.")
+                    # Force model reload on next run
+                    st.session_state.pop('model', None)
+                    st.session_state.pop('tokenizer', None)
+                    st.session_state.needs_rerun = True
+                    st.stop()
+
+                # Generate response
                 response = generate_response(
                     st.session_state.messages,
                     st.session_state.model,
