@@ -39,7 +39,7 @@ LOGDIR = "internvl_dir"
 
 # Default system prompt
 system_message_default = '' # Already set in helper
-system_message_editable = 'Please answer the user questions in detail in English.'
+system_message_editable = 'Please answer the user questions in detail and respond only in English.'
 
 # Create log directories
 os.makedirs(LOGDIR, exist_ok=True)
@@ -610,8 +610,8 @@ def reset_model_state(model):
 
     # If you're in the middle of a conversation and want to start fresh
     # Reset the conversation template
-    from internvl_helper import get_conv_template
-    model.conv_template = get_conv_template(model.template)
+    # from internvl_helper import get_conv_template
+    # model.conv_template = get_conv_template(model.template)
 
     # Force release of CUDA cache if using GPU
     if torch.cuda.is_available():
@@ -725,7 +725,7 @@ def main():
 
                     # Load the new model
                     model, tokenizer = load_model(model_path)
-                    reset_model_state(model)
+                    # reset_model_state(model)
 
                     if model is not None and tokenizer is not None:
                         st.session_state.model = model
