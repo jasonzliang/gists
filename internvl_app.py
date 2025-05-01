@@ -351,11 +351,11 @@ def generate_response(messages, model, tokenizer, max_length, temperature, top_p
                         # For multiple images
                         response, _ = model.chat(tokenizer, pixel_values, question, generation_config,
                                               num_patches_list=num_patches_list,
-                                              history=None, return_history=True)
+                                              history=history, return_history=True)
                     else:
                         # For single image or no image
                         response, _ = model.chat(tokenizer, pixel_values, question, generation_config,
-                                              history=None, return_history=True)
+                                              history=history, return_history=True)
             except RuntimeError as e:
                 # Handle probability tensor error
                 if "inf" in str(e) or "nan" in str(e) or "< 0" in str(e):
@@ -372,7 +372,7 @@ def generate_response(messages, model, tokenizer, max_length, temperature, top_p
                         response = model.chat(tokenizer, pixel_values, question, fallback_config)
                     else:
                         response, _ = model.chat(tokenizer, pixel_values, question, fallback_config,
-                                             history=None, return_history=True)
+                                             history=history, return_history=True)
                 else:
                     raise e
 
@@ -730,7 +730,7 @@ def main():
 
                     # Load the new model
                     model, tokenizer = load_model(model_path)
-                    # reset_model_state(model)
+                    reset_model_state(model)
 
                     if model is not None and tokenizer is not None:
                         st.session_state.model = model
@@ -780,7 +780,7 @@ def main():
             with col1:
                 temperature = st.slider('Temperature', min_value=0.0, max_value=1.0, value=0.3, step=0.01)
                 repetition_penalty = st.slider('Repetition Penalty', min_value=1.0, max_value=1.5, value=1.1, step=0.01)
-                max_input_tiles = st.slider('Max Input Tiles', min_value=1, max_value=12, value=6,
+                max_input_tiles = st.slider('Max Input Tiles', min_value=1, max_value=12, value=12,
                     step=1, help="Controls image resolution")
             with col2:
                 top_p = st.slider('Top-p', min_value=0.0, max_value=1.0, value=0.9, step=0.01)
