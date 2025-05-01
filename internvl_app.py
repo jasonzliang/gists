@@ -215,7 +215,7 @@ def load_model(model_path):
         }
 
         if device == "mps":
-            st.info("Loading model on Apple Silicon GPU (MPS)")
+            # st.info("Loading model on Apple Silicon GPU (MPS)")
 
             # Configure for MPS
             model_args = {
@@ -228,16 +228,16 @@ def load_model(model_path):
             try:
                 model = AutoModel.from_pretrained(model_path, **model_args)
                 model = model.to("mps").eval()
-                st.success("Model loaded in float16 on MPS")
+                # st.success("Model loaded in float16 on MPS")
             except Exception as e:
                 st.warning(f"Could not load model in float16: {str(e)}. Trying float32.")
                 model_args["torch_dtype"] = torch.float32
                 model = AutoModel.from_pretrained(model_path, **model_args)
                 model = model.to("mps").eval()
-                st.success("Model loaded in float32 on MPS")
+                # st.success("Model loaded in float32 on MPS")
 
         elif device == "cuda":
-            st.info(f"Loading model on NVIDIA GPU (CUDA)")
+            # st.info(f"Loading model on NVIDIA GPU (CUDA)")
 
             model_args = {
                 **common_args,
