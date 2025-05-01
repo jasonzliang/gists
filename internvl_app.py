@@ -37,9 +37,14 @@ IMAGENET_MEAN = (0.485, 0.456, 0.406)
 IMAGENET_STD = (0.229, 0.224, 0.225)
 LOGDIR = "internvl_dir"
 
+# Default system prompt
+system_message_default = '' # Already set in helper
+system_message_editable = 'Please answer the user questions in detail in English.'
+
 # Create log directories
 os.makedirs(LOGDIR, exist_ok=True)
 os.makedirs(os.path.join(LOGDIR, 'serve_images'), exist_ok=True)
+
 
 # Utility Functions
 def debug_print_state(message, show_contents=False):
@@ -62,23 +67,13 @@ def log_state_change(event_name):
 
 def reset_chat_context():
     """Reset the chat context when needed, but preserve system message"""
-    if 'messages' not in st.session_state:
-        st.session_state.messages = []
-        return
+    st.session_state.messages = []
 
-    # Keep only the system message if it exists
-    if st.session_state.messages and st.session_state.messages[0]['role'] == 'system':
-        system_msg = st.session_state.messages[0]
-        st.session_state.messages = [system_msg]
-    else:
-        st.session_state.messages = []
-
-        # Re-add system message if not using empty prompt
-        if not st.session_state.get('use_empty_system_prompt', False):
-            system_content = (st.session_state.get('system_message_default', 'I am InternVL3, a multimodal large language model.') +
-                            '\n\n' +
-                            st.session_state.get('system_message_editable', 'Please answer the user questions in detail.'))
-            st.session_state.messages.append({'role': 'system', 'content': system_content})
+    # Re-add system message if not using empty prompt
+    if not st.session_state.get('use_empty_system_prompt', False):
+        system_content = st.session_state.get('system_message_default', system_message_default) + \
+            '\n\n' + st.session_state.get('system_message_editable', system_message_editable)
+        st.session_state.messages.append({'role': 'system', 'content': system_content})
 
 def get_device():
     """Determine the best available device (CUDA, MPS, or CPU)"""
@@ -609,6 +604,8 @@ def show_one_or_multiple_images(message, total_image_num, lan='English', is_inpu
         return total_image_num
 
 def reset_model_state(model):
+    if not model: return
+
     # Reset img_context_token_id
     model.img_context_token_id = None
 
@@ -673,11 +670,9 @@ def main():
                          help='This is only for switching the UI language.')
 
         # Set default messages based on language
-        if lan == 'English':
-            system_message_default = 'I am InternVL3, a multimodal large language model developed by OpenGVLab.'
-            system_message_editable = 'Please answer the user questions in detail.'
-        else:
-            system_message_default = '我是书生·万象，英文名是InternVL，是由上海人工智能实验室、清华大学及多家合作单位联合开发的多模态大语言模型。'
+        if lan == '中文':
+            global system_message_default, system_message_editable
+            system_message_default = '' # Already set by helper
             system_message_editable = '请尽可能详细地回答用户的问题。'
 
         # Model selection - more compact
@@ -731,6 +726,8 @@ def main():
 
                     # Load the new model
                     model, tokenizer = load_model(model_path)
+                    reset_model_state(model)
+
                     if model is not None and tokenizer is not None:
                         st.session_state.model = model
                         st.session_state.tokenizer = tokenizer
@@ -743,7 +740,7 @@ def main():
 
         # System prompt settings - more compact
         prompt_col1, prompt_col2 = st.columns([3, 1])
-        use_empty_system_prompt = prompt_col1.checkbox('Use empty system prompt', value=True,
+        use_empty_system_prompt = prompt_col1.checkbox('Use empty system prompt',
             help='Check this to use an empty string as system prompt instead of the default.')
         st.session_state.use_empty_system_prompt = use_empty_system_prompt
 
@@ -791,16 +788,6 @@ def main():
             with st.spinner("Clearing..."):
                 # Log state before clearing
                 log_state_change("Before clearing history")
-
-                # Save current system prompt before clearing
-                current_system_prompt = ""
-                if st.session_state.messages and st.session_state.messages[0]['role'] == 'system':
-                    current_system_prompt = st.session_state.messages[0]['content']
-                elif not st.session_state.get('use_empty_system_prompt', False):
-                    # Use default if no system prompt exists yet
-                    current_system_prompt = (st.session_state.get('system_message_default', system_message_default) +
-                                           '\n\n' +
-                                           st.session_state.get('system_message_editable', system_message_editable))
 
                 # Call reset_chat_context() to properly clear messages
                 reset_chat_context()
@@ -850,7 +837,7 @@ def main():
                     st.write(f"Messages ({msg_count}):")
                     if st.session_state.messages:
                         for msg in st.session_state.messages:
-                            st.write("%s: %s" % (msg["role"], msg["content"][:40]))
+                            st.write("%s: %s" % (msg["role"], msg["content"][:100]))
 
     # Main content area
     st.title("InternVL3 Chat Demo")
