@@ -39,7 +39,7 @@ LOGDIR = "internvl_dir"
 
 # Default system prompt
 system_message_default = '' # Already set in helper
-system_message_editable = 'Please answer the user questions in detail and respond only in English.'
+system_message_editable = 'Please answer the user questions in detail.'
 
 # Create log directories
 os.makedirs(LOGDIR, exist_ok=True)
@@ -206,7 +206,6 @@ def load_model(model_path):
         common_args = {
             "low_cpu_mem_usage": True,
             "trust_remote_code": True,
-            "use_cache": True
         }
 
         if device == "mps":
@@ -216,7 +215,7 @@ def load_model(model_path):
             model_args = {
                 **common_args,
                 "torch_dtype": torch.float16,
-                "use_flash_attn": False,
+                "use_flash_attn": True,
                 "device_map": None
             }
 
@@ -857,7 +856,7 @@ def main():
                     st.write(f"Messages ({msg_count}):")
                     if st.session_state.messages:
                         for msg in st.session_state.messages:
-                            st.write("%s: %s" % (msg["role"], msg["content"][:100]))
+                            st.write("%s: %s" % (msg["role"].capitalize(), msg["content"][:100]))
 
     # Main content area
     st.title("InternVL3 Chat Demo")
