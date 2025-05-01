@@ -693,12 +693,9 @@ def main():
         model_path = st.selectbox("Model Selection", model_options, index=4,
                                 help="Select the InternVL3 model variant to use.")
 
-        st.sidebar.subheader("Model Status")
-        model_status = st.sidebar.empty()
-        st.sidebar.markdown("---")
-
         # Add the manual load button - more compact UI
         load_button_col = st.sidebar.columns([1])[0]  # Use columns for more compact layout
+        model_status = st.sidebar.empty()
 
         # Check if the selected model is already loaded
         already_loaded = ('model' in st.session_state and
