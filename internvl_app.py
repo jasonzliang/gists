@@ -610,8 +610,8 @@ def reset_model_state(model):
 
     # If you're in the middle of a conversation and want to start fresh
     # Reset the conversation template
-    # from internvl_helper import get_conv_template
-    # model.conv_template = get_conv_template(model.template)
+    from internvl_helper import get_conv_template
+    model.conv_template = get_conv_template(model.template)
 
     # Force release of CUDA cache if using GPU
     if torch.cuda.is_available():
