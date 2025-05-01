@@ -680,7 +680,7 @@ def main():
             system_message_default = '我是书生·万象，英文名是InternVL，是由上海人工智能实验室、清华大学及多家合作单位联合开发的多模态大语言模型。'
             system_message_editable = '请尽可能详细地回答用户的问题。'
 
-        # Model selection
+        # Model selection - more compact
         model_options = [
             "OpenGVLab/InternVL3-1B",
             "OpenGVLab/InternVL3-2B",
@@ -693,64 +693,59 @@ def main():
         model_path = st.selectbox("Model Selection", model_options, index=4,
                                 help="Select the InternVL3 model variant to use.")
 
-        st.sidebar.markdown("---")
-        st.sidebar.subheader("Model Status")
+        load_button_col = st.sidebar.columns([1])[0]  # Use columns for more compact layout
         model_status = st.sidebar.empty()
 
-        # Handle model switching with improved checks to prevent double loading
-        need_model_switch = False
-
-        # Check if we need to switch models
-        if 'current_model_path' not in st.session_state:
-            need_model_switch = True
-            print("No current model path - will trigger model load")
-        elif st.session_state.current_model_path != model_path:
-            need_model_switch = True
-            print(f"Model path changed from {st.session_state.current_model_path} to {model_path} - will trigger model load")
-
-        if need_model_switch:
-            # Unload previous model if it exists
-            if 'model' in st.session_state:
+        # Add the manual load button - more compact UI
+        if load_button_col.button("Load Selected Model"):
+            with st.spinner(f"Loading {model_path} model... This may take a few minutes."):
                 try:
-                    # Move model to CPU first if it's on GPU
-                    current_device = get_device()
-                    if current_device != "cpu":
-                        st.session_state.model.to('cpu')
+                    # Unload previous model if it exists
+                    if 'model' in st.session_state:
+                        try:
+                            # Move model to CPU first if it's on GPU
+                            current_device = get_device()
+                            if current_device != "cpu":
+                                st.session_state.model.to('cpu')
 
-                    # Clear references
-                    st.session_state.model = None
-                    st.session_state.tokenizer = None
-                    gc.collect()
+                            # Clear references
+                            st.session_state.model = None
+                            st.session_state.tokenizer = None
+                            gc.collect()
 
-                    # Clear device cache
-                    if current_device == "cuda":
-                        torch.cuda.empty_cache()
+                            # Clear device cache
+                            if current_device == "cuda":
+                                torch.cuda.empty_cache()
 
-                    # Wait a bit to ensure resources are released
-                    time.sleep(1.0)
+                            model_status.success("Previous model unloaded")
+                        except Exception as e:
+                            model_status.warning(f"Error unloading model: {str(e)}")
+                        time.sleep(1.0)  # Wait to ensure resources are released
 
-                    model_status.success("Previous model unloaded successfully")
+                    # Load the new model
+                    model, tokenizer = load_model(model_path)
+                    if model is not None and tokenizer is not None:
+                        st.session_state.model = model
+                        st.session_state.tokenizer = tokenizer
+                        st.session_state.current_model_path = model_path
+                        model_status.success(f"{model_path} loaded!")
+                    else:
+                        model_status.error("Failed to load model. Check path and try again.")
                 except Exception as e:
-                    model_status.warning(f"Error unloading previous model: {str(e)}")
+                    model_status.error(f"Error loading model: {str(e)}")
 
-            # Update model path and trigger rerun
-            # Important: Remove the model from session state so it will be reloaded
-            st.session_state.pop('model', None)
-            st.session_state.pop('tokenizer', None)
-            st.session_state.current_model_path = model_path
-            st.session_state.needs_rerun = True
-            print(f"Model switch prepared: will load {model_path} on next rerun")
-
-        # System prompt settings
-        use_empty_system_prompt = st.checkbox('Use empty system prompt', value=True,
+        # System prompt settings - more compact
+        st.sidebar.markdown("---")
+        prompt_col1, prompt_col2 = st.columns([3, 1])
+        use_empty_system_prompt = prompt_col1.checkbox('Use empty system prompt', value=True,
             help='Check this to use an empty string as system prompt instead of the default.')
         st.session_state.use_empty_system_prompt = use_empty_system_prompt
 
-        with st.expander('🤖 System Prompt'):
+        with st.expander('🤖 System Prompt', expanded=False):  # Default to collapsed for more compact UI
             if not use_empty_system_prompt:
                 # Show editable system prompt
                 system_message_editable = st.text_area('System Prompt', value=system_message_editable,
-                    help='System prompt is a message used to instruct the assistant.', height=100)
+                    help='System prompt is a message used to instruct the assistant.', height=80)  # Reduced height
 
                 # Store in session state
                 st.session_state.system_message_default = system_message_default
@@ -766,24 +761,28 @@ def main():
                     st.session_state.messages.insert(0,
                         {'role': 'system', 'content': system_message_default + '\n\n' + system_message_editable})
             else:
-                # Display a message indicating empty system prompt is being used
-                st.info('Using empty system prompt. Uncheck the option above to use a custom prompt.')
+                # Display a message indicating empty system prompt is being used - more compact
+                st.info('Using empty system prompt')
                 # Remove system message if present
                 if st.session_state.messages and st.session_state.messages[0]['role'] == 'system':
                     st.session_state.messages.pop(0)
 
-        # Advanced generation options
-        with st.expander('🔥 Advanced Options'):
-            temperature = st.slider('Temperature', min_value=0.0, max_value=1.0, value=0.3, step=0.01)
-            top_p = st.slider('Top-p', min_value=0.0, max_value=1.0, value=0.9, step=0.01)
-            repetition_penalty = st.slider('Repetition Penalty', min_value=1.0, max_value=1.5, value=1.1, step=0.01)
-            max_length = st.slider('Max New Tokens', min_value=0, max_value=1024, value=512, step=8)
-            max_input_tiles = st.slider('Max Input Tiles (controls image resolution)',
-                min_value=1, max_value=24, value=12, step=1)
+        # Advanced generation options - more compact
+        with st.expander('🔥 Advanced Options', expanded=False):  # Default collapsed for compactness
+            col1, col2 = st.columns(2)  # Use two columns for more compact layout
+            with col1:
+                temperature = st.slider('Temperature', min_value=0.0, max_value=1.0, value=0.3, step=0.01)
+                repetition_penalty = st.slider('Repetition Penalty', min_value=1.0, max_value=1.5, value=1.1, step=0.01)
+                max_input_tiles = st.slider('Max Input Tiles', min_value=1, max_value=24, value=12, step=1,
+                                          help="Controls image resolution")
+            with col2:
+                top_p = st.slider('Top-p', min_value=0.0, max_value=1.0, value=0.9, step=0.01)
+                max_length = st.slider('Max Tokens', min_value=0, max_value=1024, value=512, step=8)
 
-        # Clear history button
-        if st.button('Clear chat history, logs, images'):
-            with st.spinner("Clearing history..."):
+        # Clear history button - more compact
+        clear_col = st.columns([1])[0]  # Single column for compact layout
+        if clear_col.button('Clear chat history & logs'):
+            with st.spinner("Clearing..."):
                 # Log state before clearing
                 log_state_change("Before clearing history")
 
@@ -800,8 +799,9 @@ def main():
                 # Call reset_chat_context() to properly clear messages
                 reset_chat_context()
 
-                # Reset model state
-                reset_model_state(st.session_state.model)
+                # Reset model state if model is loaded
+                if 'model' in st.session_state and st.session_state.model is not None:
+                    reset_model_state(st.session_state.model)
 
                 # Set reset_history flag for the response generation
                 st.session_state.reset_history = True
@@ -813,13 +813,13 @@ def main():
                 success = clear_logs_and_images()
 
                 if success:
-                    st.success("Chat history, logs, and images cleared successfully!")
+                    st.success("History cleared!")
                 else:
-                    st.error("Failed to clear some logs or images. See console for details.")
+                    st.error("Failed to clear some data. See console for details.")
 
                 # Force a rerun to update the UI
                 st.session_state.needs_rerun = True
-            time.sleep(1)
+            time.sleep(0.5)  # Reduced wait time for better UX
 
         # File uploader
         upload_image_preview = st.empty()
@@ -834,47 +834,26 @@ def main():
             with upload_image_preview.container():
                 Library(uploaded_pil_images)
 
-        # Debug section
-        with st.sidebar.expander("Debug Information", expanded=False):
-            st.write("Session State Keys:", list(st.session_state.keys()))
-            if st.button('Show Messages'):
+        # Debug section - more compact
+        with st.sidebar.expander("Debug Info", expanded=False):
+            st.write("State Keys:", list(st.session_state.keys()))
+            debug_col1, debug_col2 = st.columns(2)
+            if debug_col1.button('Show Messages'):
                 if 'messages' in st.session_state:
-                    st.write(f"Current messages (length: {len(st.session_state.messages)}):")
+                    msg_count = len(st.session_state.messages)
+                    st.write(f"Messages ({msg_count}):")
                     if st.session_state.messages:
                         for msg in st.session_state.messages:
-                            st.write("%s: %s" % (msg["role"], msg["content"][:50]))
+                            st.write("%s: %s" % (msg["role"], msg["content"][:40]))
 
     # Main content area
     st.title("InternVL3 Chat Demo")
     st.caption("A multimodal large language model for vision-language understanding")
 
-    # Load the model - with additional checks to prevent duplicate loading
-    should_load_model = False
-
-    # Check if we need to load the model
+    # Check if model is loaded - more compact warning
     if 'model' not in st.session_state or 'tokenizer' not in st.session_state:
-        should_load_model = True
-    elif 'current_model_path' in st.session_state and st.session_state.current_model_path != model_path:
-        # We're switching models, but this should already be handled in the sidebar code
-        # This is a safety check in case the sidebar code didn't run properly
-        should_load_model = True
-
-    # Only load if needed
-    if should_load_model:
-        with st.spinner(f"Loading {model_path} model... This may take a few minutes."):
-            try:
-                model, tokenizer = load_model(model_path)
-                if model is not None and tokenizer is not None:
-                    st.session_state.model = model
-                    st.session_state.tokenizer = tokenizer
-                    st.session_state.current_model_path = model_path
-                    model_status.success(f"Model {model_path} loaded successfully!")
-                else:
-                    model_status.error("Failed to load model. Please check the model path and try again.")
-                    st.stop()
-            except Exception as e:
-                model_status.error(f"Error loading model: {str(e)}")
-                st.stop()
+        st.warning("⚠️ No model loaded. Select a model and click 'Load Selected Model' in the sidebar.")
+        st.stop()
 
     # Display chat messages
     total_image_num = 0
@@ -923,7 +902,7 @@ def main():
 
                 # Additional check to ensure we have a valid model and state
                 if 'model' not in st.session_state or 'tokenizer' not in st.session_state:
-                    st.error("Model not loaded properly. Please refresh the page.")
+                    st.error("Model not loaded properly. Please select a model in the sidebar and click 'Load Selected Model'.")
                     st.stop()
 
                 # Check if the model is in a valid state
@@ -932,7 +911,7 @@ def main():
                     model_device = next(st.session_state.model.parameters()).device
                     print(f"Model is on device: {model_device}")
                 except Exception as e:
-                    st.error(f"Model appears to be in an invalid state: {str(e)}. Please refresh the page.")
+                    st.error(f"Model appears to be in an invalid state: {str(e)}. Please reload the model.")
                     # Force model reload on next run
                     st.session_state.pop('model', None)
                     st.session_state.pop('tokenizer', None)
