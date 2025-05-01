@@ -693,11 +693,21 @@ def main():
         model_path = st.selectbox("Model Selection", model_options, index=4,
                                 help="Select the InternVL3 model variant to use.")
 
-        load_button_col = st.sidebar.columns([1])[0]  # Use columns for more compact layout
+        st.sidebar.subheader("Model Status")
         model_status = st.sidebar.empty()
+        st.sidebar.markdown("---")
 
         # Add the manual load button - more compact UI
-        if load_button_col.button("Load Selected Model"):
+        load_button_col = st.sidebar.columns([1])[0]  # Use columns for more compact layout
+
+        # Check if the selected model is already loaded
+        already_loaded = ('model' in st.session_state and
+                         'current_model_path' in st.session_state and
+                         st.session_state.current_model_path == model_path)
+
+        load_button_label = "Model Already Loaded" if already_loaded else "Load Selected Model"
+
+        if load_button_col.button(load_button_label, disabled=already_loaded):
             with st.spinner(f"Loading {model_path} model... This may take a few minutes."):
                 try:
                     # Unload previous model if it exists
@@ -735,7 +745,6 @@ def main():
                     model_status.error(f"Error loading model: {str(e)}")
 
         # System prompt settings - more compact
-        st.sidebar.markdown("---")
         prompt_col1, prompt_col2 = st.columns([3, 1])
         use_empty_system_prompt = prompt_col1.checkbox('Use empty system prompt', value=True,
             help='Check this to use an empty string as system prompt instead of the default.')
