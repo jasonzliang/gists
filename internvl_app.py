@@ -141,7 +141,7 @@ def dynamic_preprocess(image, min_num=1, max_num=12, image_size=448, use_thumbna
     blocks = target_aspect_ratio[0] * target_aspect_ratio[1]
 
     # Resize and split the image
-    resized_img = image.resize((target_width, target_height))
+    resized_img = image.resize((target_width, target_height), Image.LANCZOS)
     processed_images = []
 
     for i in range(blocks):
@@ -555,7 +555,7 @@ def load_upload_file_and_show(uploaded_files):
         img = Image.fromarray(img)
 
         # Resize if necessary
-        img = resize_image_to_max_pixels(img, max_pixels=1000000)
+        # img = resize_image_to_max_pixels(img, max_pixels=1000000)
         images.append(img)
 
     # Generate filenames using hash
@@ -779,8 +779,8 @@ def main():
             with col1:
                 temperature = st.slider('Temperature', min_value=0.0, max_value=1.0, value=0.3, step=0.01)
                 repetition_penalty = st.slider('Repetition Penalty', min_value=1.0, max_value=1.5, value=1.1, step=0.01)
-                max_input_tiles = st.slider('Max Input Tiles', min_value=1, max_value=24, value=12, step=1,
-                                          help="Controls image resolution")
+                max_input_tiles = st.slider('Max Input Tiles', min_value=1, max_value=12, value=6,
+                    step=1, help="Controls image resolution")
             with col2:
                 top_p = st.slider('Top-p', min_value=0.0, max_value=1.0, value=0.9, step=0.01)
                 max_length = st.slider('Max Tokens', min_value=0, max_value=1024, value=512, step=8)
