@@ -671,7 +671,7 @@ def main():
         # Set default messages based on language
         if lan == '中文':
             global system_message_default, system_message_editable
-            system_message_default = '' # Already set by helper
+            system_message_default = '' # Already set in helper
             system_message_editable = '请尽可能详细地回答用户的问题。'
 
         # Model selection - more compact
@@ -704,19 +704,24 @@ def main():
                     # Unload previous model if it exists
                     if 'model' in st.session_state:
                         try:
+                            # Clear cache and references
+                            st.cache_resource.clear()
+                            del st.session_state.model
+                            del st.session_state.tokenizer
+                            st.session_state.model = None
+                            st.session_state.tokenizer = None
+
                             # Move model to CPU first if it's on GPU
                             current_device = get_device()
                             if current_device != "cpu":
                                 st.session_state.model.to('cpu')
 
-                            # Clear references
-                            st.session_state.model = None
-                            st.session_state.tokenizer = None
-                            gc.collect()
-
                             # Clear device cache
                             if current_device == "cuda":
                                 torch.cuda.empty_cache()
+
+                            # Garbage collect any unneeded object
+                            gc.collect()
 
                             model_status.success("Previous model unloaded")
                         except Exception as e:
