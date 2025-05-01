@@ -205,7 +205,8 @@ def load_model(model_path):
         # Common arguments for model loading
         common_args = {
             "low_cpu_mem_usage": True,
-            "trust_remote_code": True
+            "trust_remote_code": True,
+            "use_cache": True
         }
 
         if device == "mps":
@@ -614,9 +615,16 @@ def reset_model_state(model):
     from internvl_helper import get_conv_template
     model.conv_template = get_conv_template(model.template)
 
-    # Force release of CUDA cache if using GPU
-    if torch.cuda.is_available():
+    # Force release of CUDA/MPS cache if using GPU
+    device = get_device()
+    if device == "cuda":
         torch.cuda.empty_cache()
+    elif device == "mps":
+        # MPS doesn't have an empty_cache method, but we can try to free memory
+        if hasattr(torch.mps, 'empty_cache'):
+            torch.mps.empty_cache()
+        # Force garbage collection
+        gc.collect()
 
     # Ensure model is in eval mode for inference
     model.eval()
@@ -627,9 +635,10 @@ def reset_model_state(model):
         module._forward_pre_hooks.clear()
         module._backward_hooks.clear()
 
-    # Clear KV cache
-    if hasattr(model.language_model, 'past_key_values'):
-        model.language_model.past_key_values = None
+    # Clear KV cache more thoroughly
+    if hasattr(model, 'language_model'):
+        if hasattr(model.language_model, 'past_key_values'):
+            model.language_model.past_key_values = None
 
     # For transformer models, we can reset any module that might contain state
     for module in model.modules():
@@ -637,6 +646,12 @@ def reset_model_state(model):
             module.past_key_values = None
         if hasattr(module, 'past_key_value'):
             module.past_key_value = None
+        # Reset attention cache for transformer blocks
+        if 'CausalSelfAttention' in module.__class__.__name__:
+            if hasattr(module, 'key_cache'):
+                module.key_cache = None
+            if hasattr(module, 'value_cache'):
+                module.value_cache = None
 
     return model
 
