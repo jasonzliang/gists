@@ -742,7 +742,7 @@ def main():
             print(f"Model switch prepared: will load {model_path} on next rerun")
 
         # System prompt settings
-        use_empty_system_prompt = st.checkbox('Use empty system prompt',
+        use_empty_system_prompt = st.checkbox('Use empty system prompt', value=True,
             help='Check this to use an empty string as system prompt instead of the default.')
         st.session_state.use_empty_system_prompt = use_empty_system_prompt
 
