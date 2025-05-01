@@ -71,8 +71,7 @@ def reset_chat_context():
 
     # Re-add system message if not using empty prompt
     if not st.session_state.get('use_empty_system_prompt', False):
-        system_content = st.session_state.get('system_message_default', system_message_default) + \
-            '\n\n' + st.session_state.get('system_message_editable', system_message_editable)
+        system_content = st.session_state.get('system_message_editable', system_message_editable)
         st.session_state.messages.append({'role': 'system', 'content': system_content})
 
 def get_device():
@@ -758,11 +757,11 @@ def main():
                 if not st.session_state.messages:
                     # Initialize with system message
                     st.session_state.messages.append(
-                        {'role': 'system', 'content': system_message_default + '\n\n' + system_message_editable})
+                        {'role': 'system', 'content': system_message_editable})
                 elif st.session_state.messages[0]['role'] != 'system':
                     # No system message, but should have one - add it at the beginning
                     st.session_state.messages.insert(0,
-                        {'role': 'system', 'content': system_message_default + '\n\n' + system_message_editable})
+                        {'role': 'system', 'content': system_message_editable})
             else:
                 # Display a message indicating empty system prompt is being used - more compact
                 st.info('Using empty system prompt')

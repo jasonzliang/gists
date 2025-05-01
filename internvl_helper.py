@@ -382,7 +382,7 @@ register_conv_template(
     Conversation(
         name='internvl2_5',
         system_template='<|im_start|>system\n{system_message}',
-        system_message='You are Qwen, created by Alibaba Cloud. ',
+        system_message='You are Qwen, created by Alibaba Cloud. You are a helpful assistant and always respond in English.',
         roles=('<|im_start|>user\n', '<|im_start|>assistant\n'),
         sep_style=SeparatorStyle.MPT,
         sep='<|im_end|>\n',
