@@ -178,6 +178,39 @@ def get_system_info():
 
     return info
 
+def is_running_on_steam_deck():
+    # Check if not Linux (Steam Deck runs on SteamOS, which is Linux-based)
+    if platform.system() != "Linux":
+        return False
+
+    # Check for Steam Deck environment variable (most reliable method)
+    if os.environ.get("STEAM_DECK") == "1":
+        return True
+
+    # Check for Steam Deck's product name "Jupiter"
+    try:
+        if os.path.exists("/sys/devices/virtual/dmi/id/product_name"):
+            with open("/sys/devices/virtual/dmi/id/product_name", "r") as f:
+                if "jupiter" in f.read().lower() or "valve" in f.read().lower():
+                    return True
+    except:
+        pass
+
+    # Check for SteamOS release file
+    try:
+        if os.path.exists("/etc/steamos-release"):
+            return True
+
+        # Check OS release for SteamOS indicators
+        if os.path.exists("/etc/os-release"):
+            with open("/etc/os-release", "r") as f:
+                content = f.read().lower()
+                if "steamos" in content or "holo" in content:
+                    return True
+    except:
+        pass
+    return False
+
 # Create a cached function for loading the model
 @st.cache_resource
 def load_model():
@@ -189,7 +222,7 @@ def load_model():
         sys.modules["vision"] = vision
 
         # Determine best device
-        if torch.cuda.is_available():
+        if torch.cuda.is_available() and not is_running_on_steam_deck():
             device = "cuda"
         elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
             device = "mps"
