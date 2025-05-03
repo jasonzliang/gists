@@ -1861,10 +1861,55 @@ var getViewer = function(prevChapter, nextChapter) {
         '<input class="ml-setting-loadnum" size="3" type="text" value="' + (storeGet('mLoadNum') || 10) + '" /><br><br>';
       // close grid and column
       settings += '</td></tr></table>';
-      // Save button
-      settings += '<button class="ml-setting-save">Save</button> <button class="ml-setting-close">Close</button> <span class="ml-setting-save-flash"></span>';
+      // Close button followed by save flash notification (initially empty)
+      settings += '<button class="ml-setting-close">Close</button> <span class="ml-setting-save-flash"></span>';
 
       showFloatingMsg(settings, null, true);
+
+      // Function to save all settings
+      function saveAllSettings() {
+        // persist css
+        var css = getEl('.ml-setting-css', UI.floatingMsg).value.trim();
+        prof.css = css;
+        addStyle('user', true, css);
+        var last = cssProfiles.pop();
+        storeSet('ml-setting-css-profiles', cssProfiles);
+        cssProfiles.push(last);
+        storeSet('ml-setting-css-current', UI.currentProfile);
+        // keybindings
+        getEls('.ml-setting-key input').forEach(function(input) {
+          UI.keys[input.dataset.key] = parseInt(input.value);
+        });
+        storeSet('ml-setting-key', UI.keys);
+        // autoload
+        storeSet('mAutoload', getEl('.ml-setting-autoload').checked);
+        // loadnum
+        var loadnum = getEl('.ml-setting-loadnum').value;
+        mLoadNum = getEl('.ml-setting-loadnum').value = loadnum.toLowerCase() === 'all' ? 'all' : (parseInt(loadnum) || 10);
+        storeSet('mLoadNum', mLoadNum);
+        // default zoom
+        var defaultZoom = parseInt(getEl('.ml-setting-defaultzoom').value);
+        storeSet('mDefaultZoom', defaultZoom);
+        // flash notification - only shows when saving
+        var flash = getEl('.ml-setting-save-flash');
+        flash.textContent = 'Settings saved!';
+        setTimeout(function() { flash.textContent = ''; }, 1000);
+      }
+
+      // Create debounced save function to prevent too many consecutive saves
+      function debounce(func, wait) {
+        var timeout;
+        return function() {
+          var context = this, args = arguments;
+          clearTimeout(timeout);
+          timeout = setTimeout(function() {
+            func.apply(context, args);
+          }, wait);
+        };
+      }
+
+      var debouncedSave = debounce(saveAllSettings, 250);
+
       // handle keybinding detection
       getEl('.ml-setting-key').onkeydown = function(e) {
         var target = e.target;
@@ -1872,8 +1917,10 @@ var getViewer = function(prevChapter, nextChapter) {
           e.preventDefault();
           e.stopPropagation();
           target.value = e.which || e.charCode || e.keyCode;
+          debouncedSave(); // Auto-save when key binding changes
         }
       };
+
       // delete css profile
       getEl('.ml-setting-delete-profile', UI.floatingMsg).onclick = function(e) {
         if(['Default', 'New Profile...'].indexOf(prof.name) === -1) {
@@ -1884,11 +1931,13 @@ var getViewer = function(prevChapter, nextChapter) {
             sel.remove(index);
             sel.selectedIndex = 0;
             sel.onchange({target: sel});
+            debouncedSave(); // Auto-save after profile deletion
           }
         } else {
           alert('Cannot delete profile: "' + prof.name + '"');
         }
       };
+
       // change selected css profile
       getEl('.ml-setting-css-profile', UI.floatingMsg).onchange = function(e) {
         var cssBox = getEl('.ml-setting-css');
@@ -1918,36 +1967,23 @@ var getViewer = function(prevChapter, nextChapter) {
         cssBox.value = prof.css;
         UI.currentProfile = prof.name;
         addStyle('user', true, prof.css);
+        debouncedSave(); // Auto-save when profile changes
       };
-      // handle save button
-      getEl('.ml-setting-save', UI.floatingMsg).onclick = function() {
-        // persist css
-        var css = getEl('.ml-setting-css', UI.floatingMsg).value.trim();
-        prof.css = css;
-        addStyle('user', true, css);
-        var last = cssProfiles.pop();
-        storeSet('ml-setting-css-profiles', cssProfiles);
-        cssProfiles.push(last);
-        storeSet('ml-setting-css-current', UI.currentProfile);
-        // keybindings
-        getEls('.ml-setting-key input').forEach(function(input) {
-          UI.keys[input.dataset.key] = parseInt(input.value);
-        });
-        storeSet('ml-setting-key', UI.keys);
-        // autoload
-        storeSet('mAutoload', getEl('.ml-setting-autoload').checked);
-        // loadnum
-        var loadnum = getEl('.ml-setting-loadnum').value;
-        mLoadNum = getEl('.ml-setting-loadnum').value = loadnum.toLowerCase() === 'all' ? 'all' : (parseInt(loadnum) || 10);
-        storeSet('mLoadNum', mLoadNum);
-        // flash notify
-        var flash = getEl('.ml-setting-save-flash');
-        flash.textContent = 'Saved!';
-        // default zoom
-        var defaultZoom = parseInt(getEl('.ml-setting-defaultzoom').value);
-        storeSet('mDefaultZoom', defaultZoom);
-        setTimeout(function() { flash.textContent = ''; }, 1000);
-      };
+
+      // Auto-save when CSS textarea changes (with debounce to avoid saving while typing)
+      getEl('.ml-setting-css', UI.floatingMsg).addEventListener('input', debouncedSave);
+
+      // Auto-save when default zoom changes
+      getEl('.ml-setting-defaultzoom', UI.floatingMsg).addEventListener('change', debouncedSave);
+      getEl('.ml-setting-defaultzoom', UI.floatingMsg).addEventListener('blur', debouncedSave);
+
+      // Auto-save when autoload checkbox changes
+      getEl('.ml-setting-autoload', UI.floatingMsg).addEventListener('change', debouncedSave);
+
+      // Auto-save when loadnum changes
+      getEl('.ml-setting-loadnum', UI.floatingMsg).addEventListener('change', debouncedSave);
+      getEl('.ml-setting-loadnum', UI.floatingMsg).addEventListener('blur', debouncedSave);
+
       // handle close button
       getEl('.ml-setting-close', UI.floatingMsg).onclick = function() {
         showFloatingMsg('');
