@@ -35,16 +35,19 @@ pillow_heif.register_heif_opener()
 # Constants
 IMAGENET_MEAN = (0.485, 0.456, 0.406)
 IMAGENET_STD = (0.229, 0.224, 0.225)
-LOGDIR = "/tmp/internvl_dir"
 
 # Default system prompt
 system_message_default = '' # Already set in helper
 system_message_editable = 'Please answer the user questions in detail.'
 
+# Register the cleanup function to run at exit
+LOGDIR = "/tmp/internvl_dir"
+import atexit
+atexit.register(lambda: os.system(f"rm -rf {LOGDIR}"))
+
 # Create log directories
 os.makedirs(LOGDIR, exist_ok=True)
 os.makedirs(os.path.join(LOGDIR, 'serve_images'), exist_ok=True)
-
 
 # Utility Functions
 def debug_print_state(message, show_contents=False):
