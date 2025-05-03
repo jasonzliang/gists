@@ -2447,6 +2447,13 @@ var addImage = function(src, loc, imgNum, callback) {
         }, '.ml-images img'));
       }, 100);
     }
+
+    // Add click functionality to open image in new tab
+    image.style.cursor = 'pointer';
+    image.title = 'Click to open image in new tab';
+    image.onclick = function() {
+      window.open(this.src, '_blank');
+    };
   };
 
   image.src = src;
@@ -2673,8 +2680,9 @@ var pageStats = {
   numPages: null, numLoaded: null, loadLimit: null, curChap: null, numChaps: null
 };
 
-// clear autoload
+// load JSZip library
 loadJSZip();
+// clear autoload
 storeDel('autoload');
 log('starting...');
 

@@ -40,10 +40,11 @@ st.set_page_config(
 )
 
 # Create custom module for vision fixes
-os.makedirs("./moondream_dir", exist_ok=True)
+HELPER_DIR = "/tmp/moondream_dir"
+os.makedirs(HELPER_DIR, exist_ok=True)
 
 # Write the fixed vision.py file
-with open("./moondream_dir/vision.py", "w") as f:
+with open(f"{HELPER_DIR}/vision.py", "w") as f:
     f.write("""
 # Modified vision.py with device handling fix
 import torch
@@ -93,11 +94,11 @@ def vision_projection(global_features, reconstructed, vision_config, config):
 """)
 
 # Create __init__.py
-with open("./moondream_dir/__init__.py", "w") as f:
+with open(f"{HELPER_DIR}/__init__.py", "w") as f:
     f.write("# Custom moondream module")
 
 # Add directory to Python path
-sys.path.insert(0, os.path.abspath('./'))
+sys.path.insert(0, os.path.abspath('/tmp'))
 
 # Add these authentication functions after the imports and before the page config
 def check_password():
