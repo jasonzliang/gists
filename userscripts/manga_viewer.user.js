@@ -82,265 +82,6 @@ Sample Implementation:
 }
 */
 
-// modified begin 1/2
-
-// Improved version using JSZip to download all images as a single zip file
-function downloadChapter() {
-  console.log('Starting download process...');
-
-  try {
-    // Extract chapter info from URL
-    const urlParts = window.location.pathname.split('/').filter(Boolean);
-    const mangaName = urlParts.slice(-3, -1).join('_');
-    const chapterNumber = urlParts.pop();
-    const zipname = `${mangaName}_${chapterNumber}.zip`;
-
-    // Find all images
-    const imageElements = document.querySelectorAll('.ml-images img');
-    const imageUrls = Array.from(imageElements).map(img => img.src);
-
-    if (imageUrls.length === 0) {
-      alert('No images found. Are you on the correct page?');
-      return;
-    }
-
-    // Create UI
-    const ui = createDownloadUI(zipname, imageUrls.length);
-    document.body.appendChild(ui.panel);
-
-    // Start download process
-    downloadImages(imageUrls, zipname, ui);
-
-  } catch (error) {
-    console.error('Error:', error);
-    alert(`Error: ${error.message}`);
-  }
-}
-
-// Create the download UI
-function createDownloadUI(zipname, totalImages) {
-  const panel = document.createElement('div');
-  panel.style = 'position:fixed;right:20px;top:50px;width:300px;' +
-                'background-color:rgba(0,0,0,0.8);color:white;' +
-                'padding:15px;border-radius:5px;z-index:99999;' +
-                'max-height:80vh;overflow-y:auto;';
-
-  const title = document.createElement('h3');
-  title.textContent = `Downloading: ${zipname}`;
-  title.style = 'margin-top:0;margin-bottom:10px;';
-
-  const progress = document.createElement('div');
-  progress.textContent = `0/${totalImages} downloaded`;
-
-  const progressBar = document.createElement('progress');
-  progressBar.value = 0;
-  progressBar.max = 100;
-  progressBar.style = 'width:100%;margin-top:10px;';
-
-  const status = document.createElement('div');
-  status.style = 'margin-top:10px;';
-
-  const downloadButton = document.createElement('button');
-  downloadButton.textContent = 'Download ZIP';
-  downloadButton.style = 'margin-top:10px;padding:5px 10px;background-color:#4CAF50;' +
-                         'color:white;border:none;border-radius:5px;cursor:pointer;';
-  downloadButton.disabled = true;
-  downloadButton.style.opacity = '0.5';
-
-  const closeButton = document.createElement('button');
-  closeButton.textContent = 'Close';
-  closeButton.style = 'margin-top:10px;padding:5px 10px;margin-right:10px;' +
-                      'background-color:#4CAF50;color:white;border:none;' +
-                      'border-radius:5px;cursor:pointer;';
-  closeButton.addEventListener('click', () => document.body.removeChild(panel));
-
-  panel.appendChild(title);
-  panel.appendChild(progress);
-  panel.appendChild(progressBar);
-  panel.appendChild(status);
-  panel.appendChild(closeButton);
-  panel.appendChild(downloadButton);
-
-  return {
-    panel,
-    progress,
-    progressBar,
-    status,
-    downloadButton
-  };
-}
-
-// Download an image using GM_xmlhttpRequest to bypass CORS
-function downloadImageWithGM(url) {
-  return new Promise((resolve, reject) => {
-    GM_xmlhttpRequest({
-      method: 'GET',
-      url: url,
-      responseType: 'blob',
-      onload: function(response) {
-        if (response.status >= 200 && response.status < 300) {
-          resolve(response.response);
-        } else {
-          reject(new Error(`HTTP error ${response.status}`));
-        }
-      },
-      onerror: function(error) {
-        reject(error || new Error('Download failed'));
-      }
-    });
-  });
-}
-
-// Download images and create zip
-async function downloadImages(imageUrls, zipname, ui) {
-  const zip = new JSZip();
-  const folder = zip.folder(zipname.replace('.zip', ''));
-  let completed = 0;
-  let errorCount = 0;
-
-  ui.status.textContent = 'Downloading images...';
-
-  // Process images one by one (to avoid overwhelming the browser)
-  for (let i = 0; i < imageUrls.length; i++) {
-    const url = imageUrls[i];
-    const filename = `${i + 1}.jpg`;
-
-    try {
-      ui.status.textContent = `Downloading image ${i + 1}/${imageUrls.length}...`;
-
-      // Use GM_xmlhttpRequest to download the image (bypasses CORS)
-      const blob = await downloadImageWithGM(url);
-      folder.file(filename, blob);
-
-      completed++;
-      ui.progress.textContent = `${completed}/${imageUrls.length} downloaded`;
-      ui.progressBar.value = (completed / imageUrls.length) * 100;
-    } catch (error) {
-      console.error(`Failed to download image ${i + 1}:`, error);
-      errorCount++;
-    }
-  }
-
-  // Enable download button and update status
-  ui.status.textContent = `Complete: ${completed}/${imageUrls.length} images processed` +
-                          (errorCount > 0 ? ` (${errorCount} errors)` : '');
-  ui.downloadButton.disabled = false;
-  ui.downloadButton.style.opacity = '1';
-
-  // Set up ZIP download
-  ui.downloadButton.addEventListener('click', async () => {
-    ui.status.textContent = 'Generating ZIP file...';
-    ui.downloadButton.disabled = true;
-
-    try {
-      const content = await zip.generateAsync({type: 'blob'});
-      const downloadUrl = URL.createObjectURL(content);
-
-      const link = document.createElement('a');
-      link.href = downloadUrl;
-      link.download = zipname;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-
-      ui.status.textContent = 'ZIP file downloaded successfully!';
-      setTimeout(() => URL.revokeObjectURL(downloadUrl), 100);
-    } catch (error) {
-      console.error('Error generating ZIP:', error);
-      ui.status.textContent = `Error creating ZIP: ${error.message}`;
-    } finally {
-      ui.downloadButton.disabled = false;
-    }
-  });
-}
-
-// Create and add download button to page
-function addDownloadButton(chapterUrl) {
-  // Create button element
-  const button = document.createElement('button');
-  button.textContent = 'Download';
-
-  // Create style element using the toStyleStr helper function
-  const style = document.createElement('style');
-
-  // Define button styles as an object
-  const buttonStyles = {
-    'position': 'fixed',
-    'top': '0px',
-    'right': '0px',
-    'z-index': '9999',
-    'padding': '5px',
-    'background-color': '#222',
-    'color': 'white',
-    'border': 'none',
-    'border-bottom-left-radius': '5px',
-    'cursor': 'pointer',
-    'font-size': '1.0em',
-    'font-family': 'inherit',
-    'opacity': '0.4',
-    'transition': '250ms'
-  };
-
-  // Define hover styles as an object
-  const hoverStyles = {
-    'opacity': '1.0'
-  };
-
-  // Use toStyleStr to convert the style objects to CSS strings
-  const buttonStyleStr = toStyleStr(buttonStyles, '.download-btn');
-  const hoverStyleStr = toStyleStr(hoverStyles, '.download-btn:hover');
-
-  // Combine the styles
-  style.textContent = buttonStyleStr + '\n' + hoverStyleStr;
-
-  // Add the style to document head
-  document.head.appendChild(style);
-
-  // Add the class to the button
-  button.className = 'download-btn';
-
-  // Add click event listener with URL functionality
-  button.addEventListener('click', function() {
-    // var mangaName = chapterUrl.split('/').filter(Boolean).slice(-3, -1).join('_');
-    // log('Manga name :' + mangaName);
-    // var chapterNumber = chapterUrl.split('/').filter(Boolean).pop();
-    // log('Chapter number :' + chapterNumber);
-    // var zipname = mangaName + '_' + chapterNumber;
-    // log('Zip name :' + zipname);
-    var images = Array.from(document.querySelectorAll('.ml-images img')).map(function(img) {
-      return img.src;
-    });
-
-    if (images.length > 0) {
-      downloadChapter();
-    } else {
-      alert('No images found in class ml-images.');
-    }
-  });
-
-  // Add button to the page
-  document.body.appendChild(button);
-  console.log('Download button added to page');
-}
-
-// Load JSZip library and initialize
-(function() {
-  // Add JSZip library
-  const script = document.createElement('script');
-  script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
-  script.onload = function() {
-    console.log('JSZip loaded successfully');
-  };
-  script.onerror = function() {
-    console.error('Failed to load JSZip');
-    alert('Failed to load JSZip library. Please check your internet connection.');
-  };
-  document.head.appendChild(script);
-})();
-
-//modified end 1/2
-
-
 // short reference to unsafeWindow (or window if unsafeWindow is unavailable e.g. bookmarklet)
 var W = (typeof unsafeWindow === 'undefined') ? window : unsafeWindow;
 
@@ -2329,21 +2070,311 @@ var getViewer = function(prevChapter, nextChapter) {
   return UI;
 };
 
-var getCurrentImage = function() {
-  var image;
-  getEls('.ml-images img').some(function(img) {
-    image = img;
-    return img.getBoundingClientRect().bottom > 200;
-  });
-  return image;
-};
+// Improved version using JSZip to download all images as a single zip file
+function downloadChapter() {
+  console.log('Starting download process...');
 
-var getCounter = function(imgNum) {
-  var counter = document.createElement('div');
-  counter.classList.add('ml-counter');
-  counter.textContent = imgNum;
-  return counter;
-};
+  try {
+    // Extract chapter info from URL
+    const urlParts = window.location.pathname.split('/').filter(Boolean);
+    const mangaName = urlParts.slice(-3, -1).join('_');
+    const chapterNumber = urlParts.pop();
+    const zipname = `${mangaName}_${chapterNumber}.zip`;
+
+    // Find all images
+    const imageElements = document.querySelectorAll('.ml-images img');
+    const imageUrls = Array.from(imageElements).map(img => img.src);
+
+    if (imageUrls.length === 0) {
+      alert('No images found. Are you on the correct page?');
+      return;
+    }
+
+    // Create UI
+    const ui = createDownloadUI(zipname, imageUrls.length);
+    document.body.appendChild(ui.panel);
+
+    // Start download process
+    downloadImages(imageUrls, zipname, ui);
+
+  } catch (error) {
+    console.error('Error:', error);
+    alert(`Error: ${error.message}`);
+  }
+}
+
+// Create the download UI
+function createDownloadUI(zipname, totalImages) {
+  const panel = document.createElement('div');
+  panel.style = 'position:fixed;right:20px;top:50px;width:300px;' +
+                'background-color:rgba(0,0,0,0.8);color:white;' +
+                'padding:15px;border-radius:5px;z-index:99999;' +
+                'max-height:80vh;overflow-y:auto;';
+
+  const title = document.createElement('h3');
+  title.textContent = `Downloading: ${zipname}`;
+  title.style = 'margin-top:0;margin-bottom:10px;';
+
+  const progress = document.createElement('div');
+  progress.textContent = `0/${totalImages} downloaded`;
+
+  const progressBar = document.createElement('progress');
+  progressBar.value = 0;
+  progressBar.max = 100;
+  progressBar.style = 'width:100%;margin-top:10px;';
+
+  const status = document.createElement('div');
+  status.style = 'margin-top:10px;';
+
+  const downloadButton = document.createElement('button');
+  downloadButton.textContent = 'Download ZIP';
+  downloadButton.style = 'margin-top:10px;padding:5px 10px;background-color:#4CAF50;' +
+                         'color:white;border:none;border-radius:5px;cursor:pointer;';
+  downloadButton.disabled = true;
+  downloadButton.style.opacity = '0.5';
+
+  const closeButton = document.createElement('button');
+  closeButton.textContent = 'Close';
+  closeButton.style = 'margin-top:10px;padding:5px 10px;margin-right:10px;' +
+                      'background-color:#4CAF50;color:white;border:none;' +
+                      'border-radius:5px;cursor:pointer;';
+  closeButton.addEventListener('click', () => document.body.removeChild(panel));
+
+  panel.appendChild(title);
+  panel.appendChild(progress);
+  panel.appendChild(progressBar);
+  panel.appendChild(status);
+  panel.appendChild(closeButton);
+  panel.appendChild(downloadButton);
+
+  return {
+    panel,
+    progress,
+    progressBar,
+    status,
+    downloadButton
+  };
+}
+
+// Create and add download button to page
+function addDownloadButton(chapterUrl) {
+  // Create button element
+  const button = document.createElement('button');
+  button.textContent = 'Download';
+
+  // Create style element using the toStyleStr helper function
+  const style = document.createElement('style');
+
+  // Define button styles as an object
+  const buttonStyles = {
+    'position': 'fixed',
+    'top': '0px',
+    'right': '0px',
+    'z-index': '9999',
+    'padding': '5px',
+    'background-color': '#222',
+    'color': 'white',
+    'border': 'none',
+    'border-bottom-left-radius': '5px',
+    'cursor': 'pointer',
+    'font-size': '1.0em',
+    'font-family': 'inherit',
+    'opacity': '0.4',
+    'transition': '250ms'
+  };
+
+  // Define hover styles as an object
+  const hoverStyles = {
+    'opacity': '1.0'
+  };
+
+  // Use toStyleStr to convert the style objects to CSS strings
+  const buttonStyleStr = toStyleStr(buttonStyles, '.download-btn');
+  const hoverStyleStr = toStyleStr(hoverStyles, '.download-btn:hover');
+
+  // Combine the styles
+  style.textContent = buttonStyleStr + '\n' + hoverStyleStr;
+
+  // Add the style to document head
+  document.head.appendChild(style);
+
+  // Add the class to the button
+  button.className = 'download-btn';
+
+  // Add click event listener with URL functionality
+  button.addEventListener('click', function() {
+    var images = Array.from(document.querySelectorAll('.ml-images img')).map(function(img) {
+      return img.src;
+    });
+
+    if (images.length > 0) {
+      downloadChapter();
+    } else {
+      alert('No images found in class ml-images.');
+    }
+  });
+
+  // Add button to the page
+  document.body.appendChild(button);
+  console.log('Download button added to page');
+}
+
+// Load JSZip library and initialize
+function loadJSZip() {
+  // Add JSZip library
+  const script = document.createElement('script');
+  script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+  script.onload = function() {
+    console.log('JSZip loaded successfully');
+  };
+  script.onerror = function() {
+    console.error('Failed to load JSZip');
+    alert('Failed to load JSZip library. Please check your internet connection.');
+  };
+  document.head.appendChild(script);
+}
+
+// Parallelized image download with 4 workers
+async function downloadImages(imageUrls, zipname, ui) {
+  const zip = new JSZip();
+  const folder = zip.folder(zipname.replace('.zip', ''));
+  let completed = 0;
+  let errorCount = 0;
+
+  ui.status.textContent = 'Downloading images...';
+
+  // Create a worker pool with 4 concurrent workers
+  const concurrency = 4;
+  const total = imageUrls.length;
+
+  // Setup progress tracking
+  const updateProgress = () => {
+    ui.progress.textContent = `${completed}/${total} downloaded`;
+    ui.progressBar.value = (completed / total) * 100;
+  };
+
+  // Process images in batches
+  const processInBatches = async () => {
+    // Create array of indices to process
+    const indices = Array.from({ length: total }, (_, i) => i);
+
+    // Process in chunks using Promise.all for each chunk
+    while (indices.length > 0) {
+      const chunk = indices.splice(0, concurrency);
+      const promises = chunk.map(i => processImage(imageUrls[i], i));
+      await Promise.all(promises);
+      updateProgress();
+    }
+  };
+
+  // Function to process a single image
+  const processImage = async (url, i) => {
+    const filename = `${i + 1}.jpg`;
+
+    try {
+      ui.status.textContent = `Downloading ${Math.min(concurrency, total - completed)} images simultaneously...`;
+
+      // Try to download with GM first
+      let blob = await downloadImageWithGM(url);
+
+      // CRITICAL FIX: Only add to ZIP if it's a valid Blob object
+      if (!(blob instanceof Blob)) {
+        // Fallback to direct download
+        console.warn(`Invalid data type for image ${i + 1}, attempting direct download...`);
+        try {
+          blob = await fetch(url).then(resp => resp.blob());
+        } catch (directError) {
+          throw new Error(`Could not download image: ${directError.message}`);
+        }
+      }
+
+      // Add to zip and update counter
+      folder.file(filename, blob);
+      completed++;
+    } catch (error) {
+      console.error(`Failed to download image ${i + 1}:`, error);
+      errorCount++;
+    }
+  };
+
+  // Start processing
+  await processInBatches();
+
+  // Enable download button and update status
+  ui.status.textContent = `Complete: ${completed}/${total} images processed` +
+                         (errorCount > 0 ? ` (${errorCount} errors)` : '');
+  ui.downloadButton.disabled = false;
+  ui.downloadButton.style.opacity = '1';
+
+  // Set up ZIP download
+  ui.downloadButton.addEventListener('click', async () => {
+    ui.status.textContent = 'Generating ZIP file...';
+    ui.downloadButton.disabled = true;
+
+    try {
+      const content = await zip.generateAsync({type: 'blob'});
+      const downloadUrl = URL.createObjectURL(content);
+
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = zipname;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      ui.status.textContent = 'ZIP file downloaded successfully!';
+      setTimeout(() => URL.revokeObjectURL(downloadUrl), 100);
+    } catch (error) {
+      console.error('Error generating ZIP:', error);
+      ui.status.textContent = `Error creating ZIP: ${error.message}`;
+    } finally {
+      ui.downloadButton.disabled = false;
+    }
+  });
+}
+
+function downloadImageWithGM(url) {
+  // Handle blob URLs
+  if (url.startsWith('blob:')) {
+    const promise = fetch(url)
+      .then(response => response.blob())
+      .then(blob => {
+        // console.log(`[Cache Store] Storing blob URL result in cache: ${url}, size: ${blob.size} bytes`);
+        return blob;
+      });
+    return promise;
+  }
+
+  // For regular URLs, use GM_xmlhttpRequest
+  const promise = new Promise((resolve, reject) => {
+    GM_xmlhttpRequest({
+      method: 'GET',
+      url: url,
+      responseType: 'blob',
+      headers: {
+        'Accept': 'image/*'
+      },
+      onload: function(response) {
+        if (response.status >= 200 && response.status < 300) {
+          // Verify we actually got a blob
+          if (response.response instanceof Blob) {
+            // console.log(`[Cache Store] Storing GM_xmlhttpRequest result in cache: ${url}, size: ${response.response.size} bytes`);
+            resolve(response.response);
+          } else {
+            reject(new Error('Response is not a Blob'));
+          }
+        } else {
+          reject(new Error(`HTTP error ${response.status}`));
+        }
+      },
+      onerror: function(error) {
+        reject(error || new Error('Download failed'));
+      }
+    });
+  });
+
+  return promise;
+}
 
 var addImage = function(src, loc, imgNum, callback) {
   var image = new Image(),
@@ -2523,7 +2554,6 @@ var loadManga = function(imp) {
   }
 
   addAndLoad(imgUrl, nextUrl);
-  addDownloadButton(window.location.href);
 };
 
 var waitAndLoad = function(imp) {
@@ -2576,7 +2606,7 @@ var MLoaderLoadImps = function(imps) {
       return true;
     }
   });
-
+  addDownloadButton(window.location.href);
   if (!success) {
     log('no implementation for ' + pageUrl, 'error');
   }
@@ -2607,6 +2637,7 @@ var pageStats = {
 };
 
 // clear autoload
+loadJSZip();
 storeDel('autoload');
 log('starting...');
 
