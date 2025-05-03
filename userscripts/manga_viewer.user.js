@@ -3,7 +3,6 @@
 // @version    1.2.2
 // @description  This is an unofficial fork of https://greasyfork.org/fr/scripts/12657-manga-loader-nsfw all credits goes to the original author, This script add a button to download the chapter
 // @copyright  2023+, viatana35
-// @require https://cdn.jsdelivr.net/npm/jszip@3.1.5/dist/jszip.min.js
 // @icon https://i.pinimg.com/736x/52/7f/ef/527fef673463dde3d1be2250b7120864.jpg
 // @noframes
 // @grant GM_getValue
@@ -11,11 +10,6 @@
 // @grant GM_deleteValue
 // @grant GM_xmlhttpRequest
 // @connect *.hath.network
-// *** Fix for jszip bug ***
-// @require data:application/javascript,%3BglobalThis.setImmediate%3DsetTimeout%3B
-// *************************
-// @require https://cdnjs.cloudflare.com/ajax/libs/jszip/3.9.1/jszip.min.js
-// @require https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js
 // -- NSFW START
 // @match *://dynasty-scans.com/chapters/*
 // @match *://hentaifr.net/*
@@ -57,6 +51,11 @@
 // -- FOOLSLIDE NSFW END
 // @require https://greasyfork.org/scripts/692-manga-loader/code/Manga%20Loader.user.js?29
 // @namespace https://greasyfork.org/users/1007048
+// *** Fix for jszip bug ***
+// @require data:application/javascript,%3BglobalThis.setImmediate%3DsetTimeout%3B
+// *************************
+// @require https://cdnjs.cloudflare.com/ajax/libs/jszip/3.9.1/jszip.min.js
+// @require https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js
 // @downloadURL https://github.com/jasonzliang/gists/raw/refs/heads/master/userscripts/manga_viewer.user.js
 // @updateURL https://github.com/jasonzliang/gists/raw/refs/heads/master/userscripts/manga_viewer.user.js
 // ==/UserScript==
