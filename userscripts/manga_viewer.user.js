@@ -10,6 +10,7 @@
 // @grant GM_deleteValue
 // @grant GM_xmlhttpRequest
 // @connect *.hath.network
+// @connect hath.network
 // -- NSFW START
 // @match *://dynasty-scans.com/chapters/*
 // @match *://hentaifr.net/*
