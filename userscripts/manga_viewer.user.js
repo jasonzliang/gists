@@ -2407,7 +2407,6 @@ var addImage = function(src, loc, imgNum, callback) {
         addStyle('image-width', true, toStyleStr({
           width: mDefaultZoom + '%'
         }, '.ml-images img'));
-        // showFloatingMsg('Default zoom: ' + mDefaultZoom + '%', 1000);
       }, 100);
     }
   };
