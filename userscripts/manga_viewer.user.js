@@ -1,9 +1,10 @@
 // ==UserScript==
 // @name       Manga Loader NSFW + Download
-// @version    1.0.0.1
+// @version    1.2.1
 // @description  This is an unoficial fork of https://greasyfork.org/fr/scripts/12657-manga-loader-nsfw all credits goes to the original author, This script add a button to download the chapter
 // @copyright  2023+, viatana35
 // @require https://cdn.jsdelivr.net/npm/jszip@3.1.5/dist/jszip.min.js
+// @icon https://i.pinimg.com/736x/52/7f/ef/527fef673463dde3d1be2250b7120864.jpg
 // @noframes
 // @grant GM_getValue
 // @grant GM_setValue
@@ -56,6 +57,8 @@
 // -- FOOLSLIDE NSFW END
 // @require https://greasyfork.org/scripts/692-manga-loader/code/Manga%20Loader.user.js?29
 // @namespace https://greasyfork.org/users/1007048
+// @downloadURL https://github.com/jasonzliang/gists/raw/refs/heads/master/userscripts/manga_viewer.user.js
+// @updateURL https://github.com/jasonzliang/gists/raw/refs/heads/master/userscripts/manga_viewer.user.js
 // ==/UserScript==
 
 /**
