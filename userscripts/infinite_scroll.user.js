@@ -6,7 +6,7 @@
 // @description:zh-TW 解鎖 Hath Perks 及增加一些小工具
 // @description:zh-CN 解锁 Hath Perks 及增加一些小工具
 // @namespace   https://flandre.in/github
-// @version     2.2.4
+// @version     2.2.5
 // @match       https://e-hentai.org/*
 // @match       https://exhentai.org/*
 // @require     https://unpkg.com/vue@2.6.9/dist/vue.min.js
@@ -20,8 +20,8 @@
 // @supportURL  https://github.com/FlandreDaisuki/My-Browser-Extensions/issues
 // @homepageURL https://github.com/FlandreDaisuki/My-Browser-Extensions/blob/master/userscripts/UnlockHathPerks/README.md
 // @license     MPLv2
-// @downloadURL https://update.sleazyfork.org/scripts/34422/Unlock%20Hath%20Perks.user.js
-// @updateURL https://update.sleazyfork.org/scripts/34422/Unlock%20Hath%20Perks.meta.js
+// @downloadURL https://github.com/jasonzliang/gists/raw/refs/heads/master/userscripts/infinite_scroll.user.js
+// @updateURL https://github.com/jasonzliang/gists/raw/refs/heads/master/userscripts/infinite_scroll.user.js
 // ==/UserScript==
 
 (function() {
