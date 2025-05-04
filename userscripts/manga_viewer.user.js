@@ -2973,7 +2973,7 @@
                 window.addEventListener('keydown', loadHotKey);
 
                 // append button to dom that will trigger the page load
-                btnLoad = createButton('Load Manga', function (evt) {
+                btnLoad = createButton('Open Viewer', function (evt) {
                     waitAndLoad(imp);
                     this.remove();
                 }, btnLoadCss);
@@ -2989,6 +2989,7 @@
     var pageUrl = window.location.href,
         btnLoadCss = toStyleStr({
             'position': 'fixed',
+            'border-radius': '5px',
             'bottom': 0,
             'right': 0,
             'padding': '5px',
