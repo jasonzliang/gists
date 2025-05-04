@@ -217,12 +217,18 @@
             // Start loading
             loadInitialPages();
 
-            // Scroll handler
             document.addEventListener('scroll', throttle(async () => {
                 if (state.lock) return;
 
-                const threshold = Math.min(90, 70 + (state.loadedCount * 2));
-                if (getScrollPercentage() <= threshold) return;
+                // This is the old script's condition
+                const ptbElement = $('table.ptb');
+                if (!ptbElement) return;
+
+                const anchorTop = ptbElement.getBoundingClientRect().top;
+                const vh = window.innerHeight;
+
+                // Old condition: if the table.ptb is within 2 viewport heights
+                if (anchorTop >= vh * 2) return;
 
                 state.lock = true;
 
@@ -348,7 +354,7 @@
                     (!state.preloadedPages.length && !state.nextURL) ||
                     state.loadedCount >= state.maxPages) return;
 
-                const threshold = Math.min(95, 65 + (state.loadedCount * 2));
+                const threshold = Math.min(95, 60 + (state.loadedCount * 2));
                 if (getScrollPercentage() <= threshold) return;
 
                 state.lock = true;
