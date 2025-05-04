@@ -1637,6 +1637,16 @@ var getCounter = function (num) {
     return counter;
 };
 
+var getCurrentImage = function() {
+  var image;
+  getEls('.ml-images img').some(function(img) {
+    image = img;
+    return img.getBoundingClientRect().bottom > 200;
+  });
+  return image;
+};
+
+
 var getViewer = function (prevUrl, nextUrl, prevChapter, nextChapter, imp) {
     // Get original background color before clearing document
     var originalBgColor = window.getComputedStyle(document.body).backgroundColor || 'black';
@@ -2767,15 +2777,12 @@ var addImage = function (src, loc, imgNum, callback) {
     image.onload = function () {
         originalCallback.call(this);
         // Apply default zoom
-        if (typeof lastZoom === 'undefined') {
-            setTimeout(function () {
-                var mDefaultZoom = storeGet('mDefaultZoom');
-                lastZoom = originalZoom = mDefaultZoom;
-                addStyle('image-width', true, toStyleStr({
-                    width: mDefaultZoom + '%'
-                }, '.ml-images img'));
-            }, 100);
-        }
+        setTimeout(function () {
+            var mDefaultZoom = storeGet('mDefaultZoom');
+            addStyle('image-width', true, toStyleStr({
+                width: mDefaultZoom + '%'
+            }, '.ml-images img'));
+        }, 100);
 
         // Add click functionality to open image in new tab
         image.style.cursor = 'pointer';
