@@ -249,7 +249,7 @@
         lock: false,
         nextURL: null,
         preloadedPages: [],
-        preloadLimit: 3,
+        preloadLimit: 2,
         loadedCount: 0,
         maxPages: 500,
         initialLoaded: false
