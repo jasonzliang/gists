@@ -3064,7 +3064,7 @@
 
     var nsfwimp = [{
         name: 'geh-and-exh',
-        match: "^https?://(e-hentai|exhentai)\\.org/s/",
+        match: "^https?://(e-hentai|exhentai).org/s/.*/.*",
         img: '.sni > a > img, #img',
         next: '.sni > a, #i3 a',
         prev: function () {
