@@ -327,7 +327,7 @@
             (!state.preloadedPages.length && !state.nextURL) ||
             state.loadedCount >= state.maxPages) return;
 
-        const threshold = Math.min(95, 70 + (state.loadedCount * 2));
+        const threshold = Math.min(95, 60 + (state.loadedCount * 2));
         if (getScrollPercentage() <= threshold) return;
 
         state.lock = true;
