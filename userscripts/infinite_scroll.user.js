@@ -6,7 +6,7 @@
 // @description:zh-TW 解鎖 Hath Perks 及增加一些小工具
 // @description:zh-CN 解锁 Hath Perks 及增加一些小工具
 // @namespace   https://flandre.in/github
-// @version     2.4.0
+// @version     2.4.2
 // @match       https://e-hentai.org/*
 // @match       https://exhentai.org/*
 // @require     https://unpkg.com/vue@2.6.9/dist/vue.min.js
@@ -24,399 +24,467 @@
 // @updateURL https://github.com/jasonzliang/gists/raw/refs/heads/master/userscripts/infinite_scroll.user.js
 // ==/UserScript==
 
-(function () {
-    'use strict';
+(function() {
+  'use strict';
 
-    // Optimized utility functions
-    const $ = s => document.querySelector(s);
-    const $find = (el, s) => el.querySelector(s);
-    const $el = (tag, attr = {}, cb) => {
-        const el = document.createElement(tag);
-        if (typeof attr === 'string') {
-            el.textContent = attr;
-        } else {
-            Object.assign(el, attr);
-        }
-        cb?.(el);
-        return el;
+  // Optimized utility functions
+  const $ = s => document.querySelector(s);
+  const $find = (el, s) => el.querySelector(s);
+  const $el = (tag, attr = {}, cb) => {
+    const el = document.createElement(tag);
+    if (typeof attr === 'string') {
+      el.textContent = attr;
+    } else {
+      Object.assign(el, attr);
+    }
+    cb?.(el);
+    return el;
+  };
+  const $style = s => document.head.appendChild($el('style', s));
+  const throttle = (fn, timeout = 200) => {
+    let locked = false;
+    return (...args) => {
+      if (!locked) {
+        locked = true;
+        setTimeout(() => { locked = false; }, timeout);
+        fn(...args);
+      }
     };
-    const $style = s => document.head.appendChild($el('style', s));
-    const throttle = (fn, timeout = 200) => {
-        let locked = false;
-        return (...args) => {
-            if (!locked) {
-                locked = true;
-                setTimeout(() => {
-                    locked = false;
-                }, timeout);
-                fn(...args);
-            }
-        };
-    };
-    const getScrollPercentage = () => {
-        const st = window.scrollY || document.documentElement.scrollTop;
-        const sh = document.documentElement.scrollHeight;
-        const ch = window.innerHeight;
-        return (st / (sh - ch)) * 100;
-    };
+  };
+  const getScrollPercentage = () => {
+    const st = window.scrollY || document.documentElement.scrollTop;
+    const sh = document.documentElement.scrollHeight;
+    const ch = window.innerHeight;
+    return (st / (sh - ch)) * 100;
+  };
+  const isDarkTheme = location.host === 'exhentai.org';
 
-    // Config setup
-    const uhpConfig = Object.assign({
-        abg: true,
-        mt: true,
-        pe: true
-    }, GM_getValue('uhp', {}));
-    GM_setValue('uhp', uhpConfig);
+  // Function to create a page divider with page number
+  const createPageDivider = (pageNum, containerType) => {
+    if (containerType === 'gallery') {
+      // For gallery pages (#gdt)
+      const wrapper = $el('div', {
+        className: 'uhp-gallery-divider'
+      });
 
-    // Ad block
-    if (uhpConfig.abg) {
-        Object.defineProperty(window, 'adsbyjuicy', {
-            configurable: false,
-            enumerable: false,
-            writable: false,
-            value: Object.create(null)
-        });
+      const pageInfo = $el('span', {
+        textContent: `Page ${pageNum}`,
+        className: 'uhp-page-number' + (isDarkTheme ? ' dark' : '')
+      });
+
+      wrapper.appendChild(pageInfo);
+      return wrapper;
+    } else if (containerType === 'search-grid') {
+      // For search grid layout (.itg.gld)
+      const wrapper = $el('div', {
+        className: 'uhp-divider-wrapper search-grid-divider'
+      });
+
+      const pageInfo = $el('span', {
+        textContent: `Page ${pageNum}`,
+        className: 'uhp-page-number' + (isDarkTheme ? ' dark' : '')
+      });
+
+      wrapper.appendChild(pageInfo);
+      return wrapper;
+    } else {
+      // For search table layout (table.itg > tbody)
+      const wrapper = $el('tr', {
+        className: 'uhp-divider-wrapper search-table-divider'
+      });
+
+      const cell = $el('td', {
+        colSpan: '10' // Ensure it spans all columns
+      });
+
+      const pageInfo = $el('span', {
+        textContent: `Page ${pageNum}`,
+        className: 'uhp-page-number' + (isDarkTheme ? ' dark' : '')
+      });
+
+      cell.appendChild(pageInfo);
+      wrapper.appendChild(cell);
+      return wrapper;
+    }
+  };
+
+  // Helper to insert divider
+  const insertDivider = (container, pageNum) => {
+    let containerType = 'search-grid'; // Default
+
+    if (container.id === 'gdt') {
+      containerType = 'gallery';
+    } else if (container.tagName.toLowerCase() === 'tbody') {
+      containerType = 'search-table';
     }
 
-    // DOM setup
-    const navdiv = $el('div');
-    const navbtn = $el('a', {
-        id: 'uhp-btn',
-        textContent: 'Unlock Hath Perks'
-    });
-    const uhpPanelContainer = $el('div', {
-        className: 'hidden',
-        id: 'uhp-panel-container'
-    });
-    const uhpPanel = $el('div', {
-        id: 'uhp-panel'
-    }, el => {
-        if (location.host === 'exhentai.org') {
-            el.classList.add('dark');
-        }
-        el.addEventListener('click', ev => ev.stopPropagation());
-    });
+    const divider = createPageDivider(pageNum - 1, containerType);
+    container.appendChild(divider);
+    return divider;
+  };
 
-    // Setup event listeners
-    navbtn.addEventListener('click', () => uhpPanelContainer.classList.remove('hidden'));
-    uhpPanelContainer.addEventListener('click', () => uhpPanelContainer.classList.add('hidden'));
+  // Config setup
+  const uhpConfig = Object.assign({
+    abg: true,
+    mt: true,
+    pe: true
+  }, GM_getValue('uhp', {}));
+  GM_setValue('uhp', uhpConfig);
 
-    // Append elements
-    const nb = $('#nb');
-    if (nb) {
-        navdiv.appendChild(navbtn);
-        nb.appendChild(navdiv);
-    }
-    uhpPanelContainer.appendChild(uhpPanel);
-    document.body.appendChild(uhpPanelContainer);
+  // Ad block
+  if (uhpConfig.abg) {
+    Object.defineProperty(window, 'adsbyjuicy', {
+      configurable: false,
+      enumerable: false,
+      writable: false,
+      value: Object.create(null)
+    });
+  }
 
-    // Page fetching function
-    const fetchPage = async (url, selectors) => {
-        if (!url) return {
-            elements: [],
-            nextURL: null
-        };
-        try {
-            const resp = await fetch(url, {
-                credentials: 'same-origin'
-            });
-            if (resp.ok) {
-                const html = await resp.text();
-                const docEl = new DOMParser().parseFromString(html, 'text/html').documentElement;
-                const parent = $find(docEl, selectors.parent);
-                const elements = parent ? [...parent.children] : [];
-                const nextEl = $find(docEl, selectors.np);
-                return {
-                    elements,
-                    nextURL: nextEl?.href || null
-                };
-            }
-        } catch (e) {
-            console.error('Error fetching page:', e);
-        }
+  // DOM setup
+  const navdiv = $el('div');
+  const navbtn = $el('a', {
+    id: 'uhp-btn',
+    textContent: 'Unlock Hath Perks'
+  });
+  const uhpPanelContainer = $el('div', {
+    className: 'hidden',
+    id: 'uhp-panel-container'
+  });
+  const uhpPanel = $el('div', {
+    id: 'uhp-panel',
+    className: isDarkTheme ? 'dark' : ''
+  }, el => {
+    el.addEventListener('click', ev => ev.stopPropagation());
+  });
+
+  // Setup event listeners
+  navbtn.addEventListener('click', () => uhpPanelContainer.classList.remove('hidden'));
+  uhpPanelContainer.addEventListener('click', () => uhpPanelContainer.classList.add('hidden'));
+
+  // Append elements
+  const nb = $('#nb');
+  if (nb) {
+    navdiv.appendChild(navbtn);
+    nb.appendChild(navdiv);
+  }
+  uhpPanelContainer.appendChild(uhpPanel);
+  document.body.appendChild(uhpPanelContainer);
+
+  // Page fetching function
+  const fetchPage = async (url, selectors) => {
+    if (!url) return { elements: [], nextURL: null };
+    try {
+      const resp = await fetch(url, { credentials: 'same-origin' });
+      if (resp.ok) {
+        const html = await resp.text();
+        const docEl = new DOMParser().parseFromString(html, 'text/html').documentElement;
+        const parent = $find(docEl, selectors.parent);
+        const elements = parent ? [...parent.children] : [];
+        const nextEl = $find(docEl, selectors.np);
         return {
-            elements: [],
-            nextURL: null
+          elements,
+          nextURL: nextEl?.href || null
         };
-    };
-
-    // Gallery pages infinite scroll
-    if (location.pathname.startsWith('/g/') && uhpConfig.mt) {
-        (async () => {
-            const selectors = {
-                np: '.ptt td:last-child > a',
-                parent: '#gdt'
-            };
-            const container = $(selectors.parent);
-            if (!container) return;
-
-            // State object
-            const state = {
-                lock: false,
-                nextURL: null,
-                preloadedPages: [],
-                preloadLimit: 3,
-                loadedCount: 0
-            };
-
-            // Initial page setup
-            const thisPage = await fetchPage(location.href, selectors);
-            while (container.firstChild) container.firstChild.remove();
-
-            const filteredElements = thisPage.elements.filter(el => !el.classList.contains('c'));
-            filteredElements.forEach(el => container.appendChild(el));
-            state.nextURL = thisPage.nextURL;
-
-            if (!state.nextURL) return;
-
-            // Load initial pages immediately
-            const loadInitialPages = async () => {
-                state.lock = true;
-                let remaining = state.preloadLimit;
-                let currentURL = state.nextURL;
-
-                while (remaining > 0 && currentURL) {
-                    const nextPage = await fetchPage(currentURL, selectors);
-                    if (nextPage.elements.length) {
-                        nextPage.elements
-                            .filter(el => !el.classList.contains('c'))
-                            .forEach(el => container.appendChild(el));
-
-                        currentURL = nextPage.nextURL;
-                        state.loadedCount++;
-                        remaining--;
-                    } else {
-                        currentURL = null;
-                    }
-                }
-
-                state.nextURL = currentURL;
-                state.lock = false;
-                preloadNext();
-            };
-
-            // Preload next pages
-            const preloadNext = async () => {
-                if (!state.nextURL || state.preloadedPages.length >= state.preloadLimit) return;
-
-                const nextPage = await fetchPage(state.nextURL, selectors);
-                if (nextPage.elements.length) {
-                    state.preloadedPages.push({
-                        elements: nextPage.elements.filter(el => !el.classList.contains('c')),
-                        nextURL: nextPage.nextURL
-                    });
-
-                    state.nextURL = nextPage.nextURL;
-
-                    if (nextPage.nextURL && state.preloadedPages.length < state.preloadLimit) {
-                        preloadNext();
-                    }
-                }
-            };
-
-            // Start loading
-            loadInitialPages();
-
-            document.addEventListener('scroll', throttle(async () => {
-                if (state.lock) return;
-
-                // This is the old script's condition
-                const ptbElement = $('table.ptb');
-                if (!ptbElement) return;
-
-                const anchorTop = ptbElement.getBoundingClientRect().top;
-                const vh = window.innerHeight;
-
-                // Old condition: if the table.ptb is within 2 viewport heights
-                if (anchorTop >= vh * 2) return;
-
-                state.lock = true;
-
-                if (state.preloadedPages.length) {
-                    const nextPage = state.preloadedPages.shift();
-                    nextPage.elements.forEach(el => container.appendChild(el));
-                    state.loadedCount++;
-                    preloadNext();
-                    state.lock = false;
-                } else if (state.nextURL) {
-                    const nextPage = await fetchPage(state.nextURL, selectors);
-                    nextPage.elements
-                        .filter(el => !el.classList.contains('c'))
-                        .forEach(el => container.appendChild(el));
-
-                    state.nextURL = nextPage.nextURL;
-                    state.loadedCount++;
-                    preloadNext();
-                    state.lock = false;
-                } else {
-                    state.lock = false;
-                }
-            }));
-        })();
+      }
+    } catch (e) {
+      console.error('Error fetching page:', e);
     }
+    return { elements: [], nextURL: null };
+  };
 
-    // Search results infinite scroll
-    if ($('input[name="f_search"]') && $('.itg') && uhpConfig.pe) {
-        (async () => {
-            const isTableLayout = Boolean($('table.itg'));
-            const status = $el('h1', {
-                textContent: 'Loading initial pages...',
-                id: 'uhp-status'
-            });
-            const selectors = {
-                np: '.ptt td:last-child > a, .searchnav a[href*="next="]',
-                parent: isTableLayout ? 'table.itg > tbody' : 'div.itg'
-            };
+  // Gallery pages infinite scroll
+  if (location.pathname.startsWith('/g/') && uhpConfig.mt) {
+    (async () => {
+      const selectors = {
+        np: '.ptt td:last-child > a',
+        parent: '#gdt'
+      };
+      const container = $(selectors.parent);
+      if (!container) return;
 
-            const container = $(selectors.parent);
-            if (!container) return;
+      // State object
+      const state = {
+        lock: false,
+        nextURL: null,
+        preloadedPages: [],
+        preloadLimit: 3,
+        loadedCount: 0
+      };
 
-            // State object
-            const state = {
-                lock: false,
-                nextURL: null,
-                preloadedPages: [],
-                preloadLimit: 2,
-                loadedCount: 0,
-                maxPages: 500,
-                initialLoaded: false
-            };
+      // Initial page setup
+      const thisPage = await fetchPage(location.href, selectors);
+      while (container.firstChild) container.firstChild.remove();
 
-            // Initial page setup
-            const thisPage = await fetchPage(location.href, selectors);
-            while (container.firstChild) container.firstChild.remove();
+      const filteredElements = thisPage.elements.filter(el => !el.classList.contains('c'));
+      filteredElements.forEach(el => container.appendChild(el));
+      state.nextURL = thisPage.nextURL;
 
-            thisPage.elements.forEach(el => container.appendChild(el));
-            state.nextURL = thisPage.nextURL;
-            state.loadedCount = 1;
+      if (!state.nextURL) return;
 
-            // Replace pagination
-            $('table.ptb, .itg + .searchnav, #favform + .searchnav')?.replaceWith(status);
+      // Load initial pages immediately
+      const loadInitialPages = async () => {
+        state.lock = true;
+        let remaining = state.preloadLimit;
+        let currentURL = state.nextURL;
 
-            if (!state.nextURL) {
-                status.textContent = 'End';
-                return;
+        while (remaining > 0 && currentURL) {
+          const nextPage = await fetchPage(currentURL, selectors);
+          if (nextPage.elements.length) {
+            // Insert page divider
+            insertDivider(container, state.loadedCount + 2);
+
+            nextPage.elements
+              .filter(el => !el.classList.contains('c'))
+              .forEach(el => container.appendChild(el));
+
+            currentURL = nextPage.nextURL;
+            state.loadedCount++;
+            remaining--;
+          } else {
+            currentURL = null;
+          }
+        }
+
+        state.nextURL = currentURL;
+        state.lock = false;
+        preloadNext();
+      };
+
+      // Preload next pages
+      const preloadNext = async () => {
+        if (!state.nextURL || state.preloadedPages.length >= state.preloadLimit) return;
+
+        const nextPage = await fetchPage(state.nextURL, selectors);
+        if (nextPage.elements.length) {
+          state.preloadedPages.push({
+            elements: nextPage.elements.filter(el => !el.classList.contains('c')),
+            nextURL: nextPage.nextURL
+          });
+
+          state.nextURL = nextPage.nextURL;
+
+          if (nextPage.nextURL && state.preloadedPages.length < state.preloadLimit) {
+            preloadNext();
+          }
+        }
+      };
+
+      // Start loading
+      loadInitialPages();
+
+      document.addEventListener('scroll', throttle(async () => {
+        if (state.lock) return;
+
+        // Load more when approaching the bottom
+        const ptbElement = $('table.ptb');
+        if (!ptbElement) return;
+        const anchorTop = ptbElement.getBoundingClientRect().top;
+        const vh = window.innerHeight;
+        if (anchorTop >= vh * 2) return;
+
+        state.lock = true;
+
+        if (state.preloadedPages.length) {
+          const nextPage = state.preloadedPages.shift();
+          // Insert page divider
+          insertDivider(container, state.loadedCount + 2);
+
+          nextPage.elements.forEach(el => container.appendChild(el));
+          state.loadedCount++;
+          preloadNext();
+          state.lock = false;
+        } else if (state.nextURL) {
+          const nextPage = await fetchPage(state.nextURL, selectors);
+          // Insert page divider
+          insertDivider(container, state.loadedCount + 2);
+
+          nextPage.elements
+            .filter(el => !el.classList.contains('c'))
+            .forEach(el => container.appendChild(el));
+
+          state.nextURL = nextPage.nextURL;
+          state.loadedCount++;
+          preloadNext();
+          state.lock = false;
+        } else {
+          state.lock = false;
+        }
+      }));
+    })();
+  }
+
+  // Search results infinite scroll
+  if ($('input[name="f_search"]') && $('.itg') && uhpConfig.pe) {
+    (async () => {
+      const isTableLayout = Boolean($('table.itg'));
+      const status = $el('h1', {
+        textContent: 'Loading initial pages...',
+        id: 'uhp-status'
+      });
+      const selectors = {
+        np: '.ptt td:last-child > a, .searchnav a[href*="next="]',
+        parent: isTableLayout ? 'table.itg > tbody' : 'div.itg'
+      };
+
+      const container = $(selectors.parent);
+      if (!container) return;
+
+      // State object
+      const state = {
+        lock: false,
+        nextURL: null,
+        preloadedPages: [],
+        preloadLimit: 2,
+        loadedCount: 0,
+        maxPages: 500,
+        initialLoaded: false
+      };
+
+      // Initial page setup
+      const thisPage = await fetchPage(location.href, selectors);
+      while (container.firstChild) container.firstChild.remove();
+
+      thisPage.elements.forEach(el => container.appendChild(el));
+      state.nextURL = thisPage.nextURL;
+      state.loadedCount = 1;
+
+      // Replace pagination
+      $('table.ptb, .itg + .searchnav, #favform + .searchnav')?.replaceWith(status);
+
+      if (!state.nextURL) {
+        status.textContent = 'End';
+        return;
+      }
+
+      // Load initial pages immediately
+      const loadInitialPages = async () => {
+        state.lock = true;
+        let remaining = state.preloadLimit;
+        let currentURL = state.nextURL;
+
+        while (remaining > 0 && currentURL) {
+          status.textContent = `Loading initial pages (${state.loadedCount + 1}/${state.preloadLimit + 1})...`;
+
+          const nextPage = await fetchPage(currentURL, selectors);
+          if (nextPage.elements.length) {
+            // Insert page divider
+            insertDivider(container, state.loadedCount + 1);
+
+            nextPage.elements.forEach(el => container.appendChild(el));
+            currentURL = nextPage.nextURL;
+            state.loadedCount++;
+            remaining--;
+          } else {
+            currentURL = null;
+          }
+        }
+
+        state.nextURL = currentURL;
+        state.initialLoaded = true;
+        state.lock = false;
+
+        status.textContent = state.nextURL ? `Loaded ${state.loadedCount} pages` : 'End';
+        if (state.nextURL) preloadNext();
+      };
+
+      // Preload next pages
+      const preloadNext = async () => {
+        if (!state.nextURL || state.preloadedPages.length >= state.preloadLimit) return;
+
+        const nextPage = await fetchPage(state.nextURL, selectors);
+        if (nextPage.elements.length) {
+          state.preloadedPages.push({
+            elements: nextPage.elements,
+            nextURL: nextPage.nextURL
+          });
+
+          state.nextURL = nextPage.nextURL;
+
+          if (nextPage.nextURL && state.preloadedPages.length < state.preloadLimit) {
+            preloadNext();
+          }
+        }
+      };
+
+      // Start loading
+      loadInitialPages();
+
+      // Scroll handler
+      const scrollHandler = throttle(async () => {
+        if (!state.initialLoaded || state.lock ||
+            (!state.preloadedPages.length && !state.nextURL) ||
+            state.loadedCount >= state.maxPages) return;
+
+        const threshold = Math.min(95, 60 + (state.loadedCount * 2));
+        if (getScrollPercentage() <= threshold) return;
+
+        state.lock = true;
+        status.textContent = `Loading page ${state.loadedCount + 1}...`;
+
+        if (state.preloadedPages.length) {
+          const nextPage = state.preloadedPages.shift();
+          // Insert page divider
+          insertDivider(container, state.loadedCount + 1);
+
+          nextPage.elements.forEach(el => container.appendChild(el));
+          state.loadedCount++;
+
+          status.textContent = !nextPage.nextURL || state.loadedCount >= state.maxPages ?
+            'End' : `Loaded ${state.loadedCount} pages`;
+
+          setTimeout(() => {
+            preloadNext();
+            state.lock = false;
+          }, 150);
+        } else if (state.nextURL) {
+          try {
+            const nextPage = await fetchPage(state.nextURL, selectors);
+            if (nextPage.elements.length) {
+              // Insert page divider
+              insertDivider(container, state.loadedCount + 1);
+
+              nextPage.elements.forEach(el => container.appendChild(el));
+              state.nextURL = nextPage.nextURL;
+              state.loadedCount++;
+
+              status.textContent = !state.nextURL || state.loadedCount >= state.maxPages ?
+                'End' : `Loaded ${state.loadedCount} pages`;
+            } else {
+              status.textContent = 'End';
+              state.nextURL = null;
             }
+          } catch (error) {
+            console.error('Error loading next page:', error);
+            status.textContent = 'Error loading more pages';
+          }
 
-            // Load initial pages immediately
-            const loadInitialPages = async () => {
-                state.lock = true;
-                let remaining = state.preloadLimit;
-                let currentURL = state.nextURL;
+          setTimeout(() => {
+            if (state.nextURL) preloadNext();
+            state.lock = false;
+          }, 150);
+        } else {
+          state.lock = false;
+        }
+      });
 
-                while (remaining > 0 && currentURL) {
-                    status.textContent = `Loading initial pages (${state.loadedCount + 1}/${state.preloadLimit + 1})...`;
+      // Add scroll listener
+      document.addEventListener('scroll', scrollHandler);
 
-                    const nextPage = await fetchPage(currentURL, selectors);
-                    if (nextPage.elements.length) {
-                        nextPage.elements.forEach(el => container.appendChild(el));
-                        currentURL = nextPage.nextURL;
-                        state.loadedCount++;
-                        remaining--;
-                    } else {
-                        currentURL = null;
-                    }
-                }
+      // Add intersection observer for better performance
+      new IntersectionObserver(entries => {
+        if (entries[0].isIntersecting && state.initialLoaded) scrollHandler();
+      }, {
+        rootMargin: '200px',
+        threshold: 0
+      }).observe(status);
+    })();
+  }
 
-                state.nextURL = currentURL;
-                state.initialLoaded = true;
-                state.lock = false;
-
-                status.textContent = state.nextURL ? `Loaded ${state.loadedCount} pages` : 'End';
-                if (state.nextURL) preloadNext();
-            };
-
-            // Preload next pages
-            const preloadNext = async () => {
-                if (!state.nextURL || state.preloadedPages.length >= state.preloadLimit) return;
-
-                const nextPage = await fetchPage(state.nextURL, selectors);
-                if (nextPage.elements.length) {
-                    state.preloadedPages.push({
-                        elements: nextPage.elements,
-                        nextURL: nextPage.nextURL
-                    });
-
-                    state.nextURL = nextPage.nextURL;
-
-                    if (nextPage.nextURL && state.preloadedPages.length < state.preloadLimit) {
-                        preloadNext();
-                    }
-                }
-            };
-
-            // Start loading
-            loadInitialPages();
-
-            // Scroll handler
-            const scrollHandler = throttle(async () => {
-                if (!state.initialLoaded || state.lock ||
-                    (!state.preloadedPages.length && !state.nextURL) ||
-                    state.loadedCount >= state.maxPages) return;
-
-                const threshold = Math.min(95, 60 + (state.loadedCount * 2));
-                if (getScrollPercentage() <= threshold) return;
-
-                state.lock = true;
-                status.textContent = `Loading page ${state.loadedCount + 1}...`;
-
-                if (state.preloadedPages.length) {
-                    const nextPage = state.preloadedPages.shift();
-                    nextPage.elements.forEach(el => container.appendChild(el));
-                    state.loadedCount++;
-
-                    status.textContent = !nextPage.nextURL || state.loadedCount >= state.maxPages ?
-                        'End' : `Loaded ${state.loadedCount} pages`;
-
-                    setTimeout(() => {
-                        preloadNext();
-                        state.lock = false;
-                    }, 150);
-                } else if (state.nextURL) {
-                    try {
-                        const nextPage = await fetchPage(state.nextURL, selectors);
-                        if (nextPage.elements.length) {
-                            nextPage.elements.forEach(el => container.appendChild(el));
-                            state.nextURL = nextPage.nextURL;
-                            state.loadedCount++;
-
-                            status.textContent = !state.nextURL || state.loadedCount >= state.maxPages ?
-                                'End' : `Loaded ${state.loadedCount} pages`;
-                        } else {
-                            status.textContent = 'End';
-                            state.nextURL = null;
-                        }
-                    } catch (error) {
-                        console.error('Error loading next page:', error);
-                        status.textContent = 'Error loading more pages';
-                    }
-
-                    setTimeout(() => {
-                        if (state.nextURL) preloadNext();
-                        state.lock = false;
-                    }, 150);
-                } else {
-                    state.lock = false;
-                }
-            });
-
-            // Add scroll listener
-            document.addEventListener('scroll', scrollHandler);
-
-            // Add intersection observer for better performance
-            new IntersectionObserver(entries => {
-                if (entries[0].isIntersecting && state.initialLoaded) scrollHandler();
-            }, {
-                rootMargin: '200px',
-                threshold: 0
-            }).observe(status);
-        })();
-    }
-
-    // Vue Panel
-    new Vue({
-        el: '#uhp-panel',
-        template: `
+  // Vue Panel
+  new Vue({
+    el: '#uhp-panel',
+    template: `
 <div id="uhp-panel" :class="{ dark: isExH }" @click.stop>
   <h1>Hath Perks</h1>
   <div>
@@ -430,39 +498,39 @@
     </div>
   </div>
 </div>`,
-        data: {
-            conf: uhpConfig,
-            HathPerks: [{
-                abbr: 'abg',
-                title: 'Ads-Be-Gone',
-                desc: 'Remove ads. You can use it with adblock webextensions.',
-            }, {
-                abbr: 'mt',
-                title: 'More Thumbs',
-                desc: 'Scroll infinitely in gallery pages.',
-            }, {
-                abbr: 'pe',
-                title: 'Paging Enlargement',
-                desc: 'Scroll infinitely in search results pages.',
-            }]
-        },
-        computed: {
-            isExH() {
-                return location.host === 'exhentai.org';
-            }
-        },
-        methods: {
-            save() {
-                GM_setValue('uhp', uhpConfig);
-            },
-            getConfId(id) {
-                return `ubp-conf-${id}`;
-            }
-        }
-    });
+    data: {
+      conf: uhpConfig,
+      HathPerks: [{
+        abbr: 'abg',
+        title: 'Ads-Be-Gone',
+        desc: 'Remove ads. You can use it with adblock webextensions.',
+      }, {
+        abbr: 'mt',
+        title: 'More Thumbs',
+        desc: 'Scroll infinitely in gallery pages.',
+      }, {
+        abbr: 'pe',
+        title: 'Paging Enlargement',
+        desc: 'Scroll infinitely in search results pages.',
+      }]
+    },
+    computed: {
+      isExH() {
+        return location.host === 'exhentai.org';
+      }
+    },
+    methods: {
+      save() {
+        GM_setValue('uhp', uhpConfig);
+      },
+      getConfId(id) {
+        return `ubp-conf-${id}`;
+      }
+    }
+  });
 
-    // CSS styles
-    $style(`
+  // CSS styles
+  $style(`
 #nb{width:initial;max-width:initial;max-height:initial;justify-content:center}
 table.itc+p.nopm{display:flex;flex-flow:row wrap;justify-content:center}
 input[name="f_search"]{width:100%}
@@ -484,13 +552,102 @@ input[name="favcat"]+div{display:flex;flex-flow:row wrap;justify-content:center;
 .material-switch>input[type="checkbox"]+label::after{position:absolute;top:-4px;left:-4px;border-radius:16px;width:24px;height:24px;content:"";background-color:#fff;box-shadow:0 0 5px rgba(0,0,0,.3);transition:all .3s ease-in-out}
 .material-switch>input[type="checkbox"]:checked+label{background-color:#0e0;opacity:.7}
 .material-switch>input[type="checkbox"]:checked+label::after{background-color:inherit;left:20px}
-.material-switch>input[type="checkbox"]:disabled+label::after{content:"\\f023";line-height:24px;font-size:.8em;font-family:FontAwesome;color:initial}`);
+.material-switch>input[type="checkbox"]:disabled+label::after{content:"\\f023";line-height:24px;font-size:.8em;font-family:FontAwesome;color:initial}
 
-    // Add FontAwesome
-    document.head.appendChild($el('link', {
-        href: 'https://use.fontawesome.com/releases/v5.8.0/css/all.css',
-        rel: 'stylesheet',
-        integrity: 'sha384-Mmxa0mLqhmOeaE8vgOSbKacftZcsNYDjQzuCOm6D02luYSzBG8vpaOykv9lFQ51Y',
-        crossOrigin: 'anonymous'
-    }));
+/* Page divider styles */
+.uhp-divider-wrapper {
+  width: 100%;
+  margin: 20px 0;
+  clear: both;
+  text-align: center;
+}
+
+/* For search grid layout */
+.search-grid-divider {
+  grid-column: 1 / -1 !important;
+  display: flex !important;
+  justify-content: center !important;
+  padding: 10px 0 !important;
+  background: transparent !important;
+}
+
+/* For table layout in search */
+.search-table-divider td {
+  padding: 15px 0 !important;
+  text-align: center !important;
+}
+
+/* Gallery specific styles */
+.uhp-gallery-divider {
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  width: 100% !important;
+  height: 40px !important;
+  margin: 15px 0 !important;
+  grid-column: 1 / -1 !important;
+  clear: both !important;
+  background: none !important;
+  float: none !important;
+}
+
+/* Fixed gallery divider styles */
+#gdt .uhp-gallery-divider {
+  width: 100% !important;
+  height: auto !important;
+  float: none !important;
+  margin: 15px 0 !important;
+  padding: 0 !important;
+  background: none !important;
+  text-align: center !important;
+  display: block !important;
+  overflow: visible !important;
+  position: relative !important;
+}
+
+.uhp-page-number {
+  display: inline-block !important;
+  font-weight: bold !important;
+  font-size: 16px !important;
+  padding: 5px 15px !important;
+  background-color: #f8f8f8 !important;
+  border-radius: 15px !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2) !important;
+  position: relative !important;
+  z-index: 1 !important;
+}
+
+.uhp-page-number.dark {
+  background-color: #383838 !important;
+  color: #f1f1f1 !important;
+}
+
+/* Special handling for exhentai dark theme */
+body[style*="background:#34353b"] .uhp-page-number {
+  background-color: #34353b !important;
+  color: #f1f1f1 !important;
+}
+
+body[style*="background:#4f535b"] .uhp-page-number {
+  background-color: #4f535b !important;
+  color: #f1f1f1 !important;
+}
+
+/* For grid layout specifically */
+.itg.gld > .uhp-divider-wrapper {
+  grid-column: 1 / -1 !important;
+  width: 100% !important;
+  display: flex !important;
+  justify-content: center !important;
+  background: none !important;
+}
+`);
+
+  // Add FontAwesome
+  document.head.appendChild($el('link', {
+    href: 'https://use.fontawesome.com/releases/v5.8.0/css/all.css',
+    rel: 'stylesheet',
+    integrity: 'sha384-Mmxa0mLqhmOeaE8vgOSbKacftZcsNYDjQzuCOm6D02luYSzBG8vpaOykv9lFQ51Y',
+    crossOrigin: 'anonymous'
+  }));
 })();
