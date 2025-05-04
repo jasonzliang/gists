@@ -2264,14 +2264,14 @@ var getViewer = function (prevUrl, nextUrl, prevChapter, nextChapter, imp) {
             Object.keys(imageZoomLevels).forEach(function(imgNum) {
                 applyImageZoom(imgNum, nominalZoom);
             });
-            showFloatingMsg('reset zoom to ' + nominalZoom + '%', 1000);
+            showFloatingMsg('Reset zoom to ' + nominalZoom + '%', 1000);
         } else {
             // Apply adjustment to all images
             nominalZoom = Math.max(5, Math.min(nominalZoom + adjustment, 400));
             Object.keys(imageZoomLevels).forEach(function(imgNum) {
                 applyImageZoom(imgNum, nominalZoom);
             });
-            showFloatingMsg('adjusted zoom to ' + nominalZoom + '%', 1000);
+            showFloatingMsg('Adjusted zoom to ' + nominalZoom + '%', 1000);
             // Object.keys(imageZoomLevels).forEach(function(imgNum) {
             //     var zoom = imageZoomLevels[imgNum] + adjustment;
             //     zoom = Math.max(10, Math.min(zoom, 200));
