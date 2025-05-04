@@ -1851,10 +1851,8 @@
             return nextPageBtn;
         }
 
-        if (prevUrl) {
+        if (prevUrl && nextUrl) {
             UI.btnPrevPage = createPrevButton(prevUrl);
-        }
-        if (nextUrl) {
             UI.btnNextPage = createNextButton(nextUrl);
         }
 
