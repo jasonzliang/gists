@@ -1726,36 +1726,36 @@ var getViewer = function (prevUrl, nextUrl, prevChapter, nextChapter, imp) {
         }, '.ml-setting-autoload'),
         prevPageBtnCss = toStyleStr({
             'position': 'fixed',
-            'top': '5%',
-            'right': '2.25%',
+            'top': '5.5%',
+            'right': '0.25%',
             'transform': 'translateY(-50%)',
             'background-color': '#222',
             'color': 'white',
             'border': 'none',
-            'padding': '7px',
+            'padding': '5px 10px',
             'border-radius': '5px',
             'cursor': 'pointer',
             'opacity': '0.4',
             'transition': '250ms',
-            'font-size': '1.0em',
+            'font-size': '1.4em',
         }, '.ml-prev-page-btn'),
         prevPageBtnHoverCss = toStyleStr({
             'opacity': '1'
         }, '.ml-prev-page-btn:hover'),
         nextPageBtnCss = toStyleStr({
             'position': 'fixed',
-            'top': '5%',
+            'top': '9.5%',
             'right': '0.25%',
             'transform': 'translateY(-50%)',
             'background-color': '#222',
             'color': 'white',
             'border': 'none',
-            'padding': '7px',
+            'padding': '5px 10px',
             'border-radius': '5px',
             'cursor': 'pointer',
             'opacity': '0.4',
             'transition': '250ms',
-            'font-size': '1.0em',
+            'font-size': '1.4em',
         }, '.ml-next-page-btn'),
         nextPageBtnHoverCss = toStyleStr({
             'opacity': '1'
@@ -1828,7 +1828,7 @@ var getViewer = function (prevUrl, nextUrl, prevChapter, nextChapter, imp) {
     // Helper function to create the previous page button with consistent styling
     function createPrevButton(url) {
         prevPageBtn = document.createElement('button');
-        prevPageBtn.textContent = '←';
+        prevPageBtn.textContent = '↑';
         prevPageBtn.className = 'ml-prev-page-btn';
         prevPageBtn.title = 'Restart Viewer on Prev Page';
         prevPageBtn.onclick = function () {
@@ -1841,7 +1841,7 @@ var getViewer = function (prevUrl, nextUrl, prevChapter, nextChapter, imp) {
     // Helper function to create the next page button with consistent styling
     function createNextButton(url) {
         nextPageBtn = document.createElement('button');
-        nextPageBtn.textContent = '→';
+        nextPageBtn.textContent = '↓';
         nextPageBtn.className = 'ml-next-page-btn';
         nextPageBtn.title = 'Restart Viewer on Next Page';
         nextPageBtn.onclick = function () {
@@ -2534,7 +2534,7 @@ function addDownloadButton(chapterUrl) {
         'top': '0px',
         'right': '0px',
         'z-index': '100',
-        'padding': '5px',
+        'padding': '7px',
         'background-color': '#222',
         'color': 'white',
         'border': 'none',
