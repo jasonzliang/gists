@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name       Manga Loader NSFW + Download
-// @version    1.4.0
+// @version    1.5.0
 // @description  This is an unofficial fork of https://greasyfork.org/fr/scripts/12657-manga-loader-nsfw all credits goes to the original author, This script add a button to download the chapter
 // @copyright  2023+, viatana35
 // @icon https://i.pinimg.com/736x/52/7f/ef/527fef673463dde3d1be2250b7120864.jpg
@@ -2078,7 +2078,7 @@ var getViewer = function (prevUrl, nextUrl, prevChapter, nextChapter, imp) {
                 }).join('') +
                 '</select><button class="ml-setting-delete-profile">x</button><br>' +
                 '<textarea style="width: 300px; height: 300px;" type="text" class="ml-setting-css">' + prof.css + '</textarea><br><br>';
-            settings += "Default zoom %: " + '<input class="ml-setting-defaultzoom" size="3" type="text" value="' + storeGet('mDefaultZoom') + '" /><br><br>';
+            settings += "Default zoom %: " + '<input class="ml-setting-defaultzoom" size="3" type="text" value="' + (storeGet('mDefaultZoom') || 100) + '" /><br><br>';
             // start new column
             settings += '</td><td>';
             // Keybindings
@@ -2236,36 +2236,58 @@ var getViewer = function (prevUrl, nextUrl, prevChapter, nextChapter, imp) {
         }
     });
 
-    // zoom
-    var lastZoom, originalZoom, newZoomPostion;
+    // Modify the changeZoom function to apply zoom to all images simultaneously
+    var nominalZoom = storeGet('mDefaultZoom') || 100;
     var changeZoom = function (action, elem) {
         var ratioZoom = (document.documentElement.scrollTop || document.body.scrollTop) / (document.documentElement.scrollHeight || document.body.scrollHeight);
         var curImage = getCurrentImage();
-        if (!lastZoom) {
-            // Use the global default zoom value
-            lastZoom = originalZoom = storeGet("mDefaultZoom");
-        }
-        // Rest of the function remains the same
-        var zoom = lastZoom;
-        if (action === '+') zoom += 5;
-        if (action === '-') zoom -= 5;
+        if (!curImage) return;
+
+        // Extract the image number from the ID of current image (for reference)
+        var curImgNum = parseInt(curImage.id.split('-')[2]);
+
+        // Get global base zoom
+        var mDefaultZoom = storeGet('mDefaultZoom') || 100;
+
+        // Get current zoom for reference image
+        // var currentZoom = imageZoomLevels[curImgNum] || mDefaultZoom;
+
+        // Calculate adjustment
+        var adjustment = 0;
+        if (action === '+') adjustment = 5;
+        if (action === '-') adjustment = -5;
+
+        // Apply to all images
         if (action === '=') {
-            lastZoom = originalZoom;
-            addStyle('image-width', true, '');
-            showFloatingMsg('reset zoom', 500);
-            newZoomPostion = (document.documentElement.scrollHeight || document.body.scrollHeight) * ratioZoom;
-            window.scroll(0, newZoomPostion);
-            return;
+            // Reset all images to default
+            nominalZoom = mDefaultZoom;
+            Object.keys(imageZoomLevels).forEach(function(imgNum) {
+                applyImageZoom(imgNum, nominalZoom);
+            });
+            showFloatingMsg('reset zoom to ' + nominalZoom + '%', 1000);
+        } else {
+            // Apply adjustment to all images
+            nominalZoom = Math.max(5, Math.min(nominalZoom + adjustment, 400));
+            Object.keys(imageZoomLevels).forEach(function(imgNum) {
+                applyImageZoom(imgNum, nominalZoom);
+            });
+            showFloatingMsg('adjusted zoom to ' + nominalZoom + '%', 1000);
+            // Object.keys(imageZoomLevels).forEach(function(imgNum) {
+            //     var zoom = imageZoomLevels[imgNum] + adjustment;
+            //     zoom = Math.max(10, Math.min(zoom, 200));
+            //     applyImageZoom(imgNum, zoom);
+            // });
         }
-        zoom = Math.max(10, Math.min(zoom, 100));
-        lastZoom = zoom;
-        addStyle('image-width', true, toStyleStr({
-            width: zoom + '%'
-        }, '.ml-images img'));
-        showFloatingMsg('zoom: ' + zoom + '%', 500);
-        newZoomPostion = (document.documentElement.scrollHeight || document.body.scrollHeight) * ratioZoom;
-        window.scroll(0, newZoomPostion);
+
+        // Maintain scroll position
+        newZoomPosition = (document.documentElement.scrollHeight || document.body.scrollHeight) * ratioZoom;
+        window.scroll(0, newZoomPosition);
     };
+
+    // Instead, add a window unload event to save zoom levels when page is closed or navigated away from
+    window.addEventListener('beforeunload', function() {
+        saveZoomLevels();
+    });
 
     var goToPage = function (toWhichPage) {
         var curId = getCurrentImage().id;
@@ -2753,6 +2775,39 @@ function downloadImageWithGM(url) {
     return promise;
 }
 
+// Add a global object to store zoom levels for each image
+var imageZoomLevels = {};
+
+// New function to apply zoom to a specific image
+function applyImageZoom(imgNum, zoomLevel) {
+    var image = document.getElementById('ml-pageid-' + imgNum);
+    if (image) {
+        // Get the natural (original) width of the image
+        var naturalWidth = image.naturalWidth;
+
+        // Calculate what the zoomed width would be
+        var containerWidth = image.parentElement.clientWidth;
+        var zoomedWidth = (containerWidth * zoomLevel) / 100;
+        // Zoom that will allow original image width
+        var naturalZoomLevel = (naturalWidth / containerWidth) * 100;
+
+        // Only apply zoom if the original image is wider than the zoomed width
+        if (naturalWidth >= zoomedWidth) {
+            image.style.width = zoomLevel + '%';
+            imageZoomLevels[imgNum] = zoomLevel;
+        } else {
+            image.style.width = naturalZoomLevel + '%';
+            imageZoomLevels[imgNum] = naturalZoomLevel;
+        }
+    }
+}
+
+// Add a function to save zoom levels when exiting
+function saveZoomLevels() {
+    storeSet('ml-image-zoom-levels', imageZoomLevels);
+}
+
+// Modify the addImage function to initialize zoom for each image
 var addImage = function (src, loc, imgNum, callback) {
     var image = new Image(),
         counter = getCounter(imgNum);
@@ -2772,17 +2827,17 @@ var addImage = function (src, loc, imgNum, callback) {
     };
     image.id = 'ml-pageid-' + imgNum;
 
-    // Modify the onload handler to apply zoom when the first image loads
+    // Initialize zoom level for this image
+    if (!imageZoomLevels[imgNum]) {
+        imageZoomLevels[imgNum] = storeGet('mDefaultZoom') || 100;
+    }
+
+    // Modify the onload handler
     var originalCallback = callback;
     image.onload = function () {
         originalCallback.call(this);
-        // Apply default zoom
-        setTimeout(function () {
-            var mDefaultZoom = storeGet('mDefaultZoom');
-            addStyle('image-width', true, toStyleStr({
-                width: mDefaultZoom + '%'
-            }, '.ml-images img'));
-        }, 100);
+        // Apply the stored zoom for this specific image
+        applyImageZoom(imgNum, imageZoomLevels[imgNum]);
 
         // Add click functionality to open image in new tab
         image.style.cursor = 'pointer';
