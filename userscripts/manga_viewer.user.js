@@ -2415,7 +2415,7 @@
             'color': 'white',
             'padding': '15px',
             'border-radius': '5px',
-            'z-index': '99999',
+            'z-index': '100',
             'max-height': '80vh',
             'overflow-y': 'auto'
         };
@@ -2532,7 +2532,7 @@
             'position': 'fixed',
             'top': '0px',
             'right': '0px',
-            'z-index': '9999',
+            'z-index': '100',
             'padding': '5px',
             'background-color': '#222',
             'color': 'white',
@@ -2993,7 +2993,7 @@
             'right': 0,
             'padding': '5px',
             'margin': '0 10px 10px 0',
-            'z-index': '9999999999'
+            'z-index': '100'
         }),
         currentImpName, btnLoad;
 
