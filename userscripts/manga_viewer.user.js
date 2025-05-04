@@ -1713,6 +1713,7 @@ var getViewer = function(prevChapter, nextChapter) {
       }, timeout);
     }
   };
+  window.showFloatingMsg = showFloatingMsg;
   var isMessageFloating = function() {
     return !!UI.floatingMsg.innerHTML;
   };
