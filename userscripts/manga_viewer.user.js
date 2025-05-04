@@ -1830,7 +1830,7 @@
             prevPageBtn = document.createElement('button');
             prevPageBtn.textContent = '←';
             prevPageBtn.className = 'ml-prev-page-btn';
-            prevPageBtn.title = 'Previous Page';
+            prevPageBtn.title = 'Restart Viewer on Prev Page';
             prevPageBtn.onclick = function () {
                 window.location.href = url;
             };
@@ -1843,7 +1843,7 @@
             nextPageBtn = document.createElement('button');
             nextPageBtn.textContent = '→';
             nextPageBtn.className = 'ml-next-page-btn';
-            nextPageBtn.title = 'Next Page';
+            nextPageBtn.title = 'Restart Viewer on Next Page';
             nextPageBtn.onclick = function () {
                 window.location.href = url;
             };
@@ -2924,6 +2924,7 @@
         }
 
         addAndLoad(imgUrl, nextUrl);
+        addDownloadButton(window.location.href);
     };
 
     var waitAndLoad = function (imp) {
@@ -2980,7 +2981,6 @@
                 return true;
             }
         });
-        addDownloadButton(window.location.href);
         if (!success) {
             log('no implementation for ' + pageUrl, 'error');
         }
