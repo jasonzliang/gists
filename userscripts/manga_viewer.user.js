@@ -2016,7 +2016,7 @@ var getViewer = function (prevUrl, nextUrl, prevChapter, nextChapter, imp) {
         } else {
             UI.lastFloat = evt.target;
             showFloatingMsg([
-                'You can define custom CSS in the new settings panel (accessible through the gear icon at the bottom left).',
+                'You can define custom CSS in the new settings panel (gear icon on bottom left).',
                 'The CSS will be saved and reapplied each time the script loads.',
                 'You can change the page background color, image width, and pretty much anything else.',
                 '',
