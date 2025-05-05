@@ -9,7 +9,7 @@ worker_class = "sync"  # Can be 'sync', 'gevent', 'eventlet', etc.
 timeout = 120  # Seconds
 
 # Logging
-loglevel = "info"
+loglevel = "debug"
 accesslog = "-"  # Log to stdout
 errorlog = "-"   # Log to stdout
 
