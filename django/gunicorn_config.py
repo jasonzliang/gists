@@ -21,6 +21,3 @@ proc_name = "rome_ai_gunicorn"
 
 # Reload when code changes (for development only - remove in production)
 reload = True
-
-# python manage.py collectstatic
-# gunicorn -c gunicorn_config.py rome_ai_project.wsgi:application
