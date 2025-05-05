@@ -1,0 +1,90 @@
+{% extends 'rome_ai_app/base.html' %}
+{% load static %}
+
+{% block title %}{{ post.title }} - Rome AI Initiative Blog{% endblock %}
+{% block meta_description %}{{ post.summary }}{% endblock %}
+{% block og_title %}{{ post.title }}{% endblock %}
+{% block og_description %}{{ post.summary }}{% endblock %}
+{% block og_type %}article{% endblock %}
+{% if post.featured_image %}
+{% block og_image %}{{ request.scheme }}://{{ request.get_host }}{{ post.featured_image.url }}{% endblock %}
+{% block twitter_image %}{{ request.scheme }}://{{ request.get_host }}{{ post.featured_image.url }}{% endblock %}
+{% endif %}
+
+{% block extra_head %}
+<script type="application/ld+json">
+{
+    "@context": "https://schema.org",
+    "@type": "BlogPosting",
+    "headline": "{{ post.title }}",
+    "datePublished": "{{ post.published_at|date:'c' }}",
+    "dateModified": "{{ post.updated_at|date:'c' }}",
+    {% if post.featured_image %}
+    "image": "{{ request.scheme }}://{{ request.get_host }}{{ post.featured_image.url }}",
+    {% endif %}
+    "author": {
+        "@type": "Organization",
+        "name": "Rome AI Initiative"
+    },
+    "publisher": {
+        "@type": "Organization",
+        "name": "Rome AI Initiative",
+        "logo": {
+            "@type": "ImageObject",
+            "url": "{{ request.scheme }}://{{ request.get_host }}{% static 'rome_ai_app/img/logo.svg' %}"
+        }
+    },
+    "description": "{{ post.summary }}"
+}
+</script>
+{% endblock %}
+
+{% block content %}
+<section class="page-header">
+    <div class="container">
+        <h1>{{ post.title }}</h1>
+        <div class="post-meta">
+            <span><i class="far fa-calendar"></i> {{ post.published_at|date:"F j, Y" }}</span>
+            <span><i class="far fa-folder"></i> {{ post.category.name }}</span>
+        </div>
+    </div>
+</section>
+
+<section class="blog-detail">
+    <div class="container">
+        <div class="blog-detail-grid">
+            <article class="blog-detail-main">
+                {% if post.featured_image %}
+                <div class="blog-feature-image">
+                    <img src="{{ post.featured_image.url }}" alt="{{ post.title }}" loading="lazy">
+                </div>
+                {% endif %}
+
+                <div class="blog-content">
+                    {{ post.content|safe }}
+                </div>
+            </article>
+
+            <div class="blog-sidebar">
+                <div class="sidebar-widget">
+                    <h3>Categories</h3>
+                    <ul class="sidebar-categories">
+                        {% for category in categories %}
+                        <li><a href="{% url 'blog_list' %}?category={{ category.slug }}">{{ category.name }}</a></li>
+                        {% endfor %}
+                    </ul>
+                </div>
+
+                <div class="sidebar-widget">
+                    <h3>Recent Posts</h3>
+                    <ul class="sidebar-categories">
+                        {% for recent_post in recent_posts %}
+                        <li><a href="{{ recent_post.get_absolute_url }}">{{ recent_post.title }}</a></li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

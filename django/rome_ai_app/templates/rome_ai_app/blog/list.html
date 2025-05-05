@@ -1,0 +1,96 @@
+{% extends 'rome_ai_app/base.html' %}
+{% load static %}
+
+{% block title %}Blog - Rome AI Initiative{% endblock %}
+{% block meta_description %}Read the latest articles, research updates, and news from the Rome AI Initiative blog.{% endblock %}
+
+{% block extra_head %}
+{% if page_obj.has_previous %}
+    <link rel="prev" href="?page={{ page_obj.previous_page_number }}">
+{% endif %}
+{% if page_obj.has_next %}
+    <link rel="next" href="?page={{ page_obj.next_page_number }}">
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<section class="page-header">
+    <div class="container">
+        <h1>Blog</h1>
+        <p>Latest news, insights, and research updates</p>
+    </div>
+</section>
+
+<section class="blog-content">
+    <div class="container">
+        <div class="blog-grid">
+            <div class="blog-main">
+                {% for post in posts %}
+                <article class="blog-post">
+                    {% if post.featured_image %}
+                    <div class="blog-post-image">
+                        <img src="{{ post.featured_image.url }}" alt="{{ post.title }}" loading="lazy">
+                    </div>
+                    {% endif %}
+                    <div class="blog-post-content">
+                        <div class="blog-post-meta">
+                            <span><i class="far fa-calendar"></i> {{ post.published_at|date:"F j, Y" }}</span>
+                            <span><i class="far fa-folder"></i> {{ post.category.name }}</span>
+                        </div>
+                        <h2>{{ post.title }}</h2>
+                        <p>{{ post.summary }}</p>
+                        <a href="{{ post.get_absolute_url }}" class="read-more">Read Full Article <i class="fas fa-arrow-right"></i></a>
+                    </div>
+                </article>
+                {% empty %}
+                <div class="empty-state">
+                    <p>Blog posts coming soon. Stay tuned!</p>
+                </div>
+                {% endfor %}
+
+                {% if is_paginated %}
+                <div class="pagination">
+                    {% if page_obj.has_previous %}
+                    <a href="?page=1" aria-label="First page">&laquo;</a>
+                    <a href="?page={{ page_obj.previous_page_number }}" aria-label="Previous page">&lsaquo;</a>
+                    {% endif %}
+
+                    {% for num in page_obj.paginator.page_range %}
+                        {% if page_obj.number == num %}
+                        <a href="?page={{ num }}" class="active">{{ num }}</a>
+                        {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+                        <a href="?page={{ num }}">{{ num }}</a>
+                        {% endif %}
+                    {% endfor %}
+
+                    {% if page_obj.has_next %}
+                    <a href="?page={{ page_obj.next_page_number }}" aria-label="Next page">&rsaquo;</a>
+                    <a href="?page={{ page_obj.paginator.num_pages }}" aria-label="Last page">&raquo;</a>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+
+            <div class="blog-sidebar">
+                <div class="sidebar-widget">
+                    <h3>Categories</h3>
+                    <ul class="sidebar-categories">
+                        {% for category in categories %}
+                        <li><a href="?category={{ category.slug }}">{{ category.name }}</a></li>
+                        {% endfor %}
+                    </ul>
+                </div>
+
+                <div class="sidebar-widget">
+                    <h3>Recent Posts</h3>
+                    <ul class="sidebar-categories">
+                        {% for post in recent_posts %}
+                        <li><a href="{{ post.get_absolute_url }}">{{ post.title }}</a></li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

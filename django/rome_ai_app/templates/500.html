@@ -1,0 +1,26 @@
+{% extends 'rome_ai_app/base.html' %}
+{% load static %}
+
+{% block title %}Server Error - Rome AI Initiative{% endblock %}
+{% block meta_description %}We encountered an internal server error. Please try again later.{% endblock %}
+
+{% block content %}
+<section class="page-header">
+    <div class="container">
+        <h1>500 - Server Error</h1>
+        <p>Oops! Something went wrong on our end</p>
+    </div>
+</section>
+
+<section class="error-content">
+    <div class="container">
+        <div class="error-message">
+            <p>We've encountered an unexpected error on our servers. Our team has been notified and is working to fix the issue.</p>
+            <div class="error-actions">
+                <a href="{% url 'index' %}" class="btn btn-primary">Go to Homepage</a>
+                <a href="{% url 'contact' %}" class="btn btn-secondary">Contact Support</a>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

@@ -1,0 +1,98 @@
+{% extends 'rome_ai_app/base.html' %}
+{% load static %}
+
+{% block title %}Rome AI Initiative - Advancing Artificial Intelligence Research in Rome{% endblock %}
+
+{% block content %}
+<section class="hero">
+    <div class="container">
+        <div class="hero-content">
+            <h1>Advancing AI Research in the Eternal City</h1>
+            <p>Connecting ancient wisdom with cutting-edge technology to solve tomorrow's challenges.</p>
+            <div class="hero-buttons">
+                <a href="{% url 'about' %}" class="btn btn-primary">Learn More</a>
+                <a href="{% url 'projects' %}" class="btn btn-secondary">Our Projects</a>
+            </div>
+        </div>
+        <div class="hero-image">
+            <img src="{% static 'rome_ai_app/img/hero.jpg' %}" alt="AI technology meets Roman architecture" loading="lazy">
+        </div>
+    </div>
+</section>
+
+<section class="featured-research">
+    <div class="container">
+        <div class="section-header">
+            <h2>Latest Research</h2>
+            <p>Explore our cutting-edge AI research initiatives</p>
+        </div>
+        <div class="research-grid">
+            <div class="research-card">
+                <div class="research-image">
+                    <img src="{% static 'rome_ai_app/img/research-1.jpg' %}" alt="Neural Architecture Research" loading="lazy">
+                </div>
+                <div class="research-content">
+                    <h3>Neural Architecture Search</h3>
+                    <p>Developing efficient neural network architectures for resource-constrained environments.</p>
+                    <a href="{% url 'research' %}" class="read-more">Learn More <i class="fas fa-arrow-right"></i></a>
+                </div>
+            </div>
+            
+            <div class="research-card">
+                <div class="research-image">
+                    <img src="{% static 'rome_ai_app/img/research-2.jpg' %}" alt="Multimodal Learning Research" loading="lazy">
+                </div>
+                <div class="research-content">
+                    <h3>Multimodal Learning</h3>
+                    <p>Combining vision and language for enhanced AI understanding of cultural heritage.</p>
+                    <a href="{% url 'research' %}" class="read-more">Learn More <i class="fas fa-arrow-right"></i></a>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="featured-projects">
+    <div class="container">
+        <div class="section-header">
+            <h2>Our Projects</h2>
+            <p>From research to real-world applications</p>
+        </div>
+        <div class="projects-grid">
+            {% if featured_projects %}
+                {% for project in featured_projects %}
+                <div class="project-card">
+                    {% if project.image %}
+                    <div class="project-image">
+                        <img src="{{ project.image.url }}" alt="{{ project.title }}" loading="lazy">
+                    </div>
+                    {% endif %}
+                    <div class="project-content">
+                        <h3>{{ project.title }}</h3>
+                        <p>{{ project.description|truncatewords:25 }}</p>
+                        <a href="#" class="read-more">Learn More <i class="fas fa-arrow-right"></i></a>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="empty-state">
+                    <p>Projects coming soon. Stay tuned!</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</section>
+
+<section class="cta">
+    <div class="container">
+        <div class="cta-content">
+            <h2>Join Our AI Research Community</h2>
+            <p>Collaborate with us on cutting-edge AI research and applications in Rome</p>
+            <div class="cta-buttons">
+                <a href="{% url 'contact' %}" class="btn btn-primary">Get in Touch</a>
+                <a href="#" class="btn btn-outline">Subscribe</a>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

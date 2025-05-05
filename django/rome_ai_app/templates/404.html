@@ -1,0 +1,53 @@
+{% extends 'rome_ai_app/base.html' %}
+{% load static %}
+
+{% block title %}Page Not Found - Rome AI Initiative{% endblock %}
+{% block meta_description %}The page you are looking for could not be found. Please navigate back to our homepage.{% endblock %}
+
+{% block content %}
+<section class="page-header">
+    <div class="container">
+        <h1>404 - Page Not Found</h1>
+        <p>We couldn't find the page you were looking for</p>
+    </div>
+</section>
+
+<section class="error-content">
+    <div class="container">
+        <div class="error-message">
+            <p>The page you requested does not exist or has been moved. Please check the URL or navigate using the links below.</p>
+            <div class="error-actions">
+                <a href="{% url 'index' %}" class="btn btn-primary">Go to Homepage</a>
+                <a href="{% url 'research' %}" class="btn btn-secondary">Explore Our Research</a>
+            </div>
+        </div>
+        <div class="sitemap-links">
+            <h2>Site Navigation</h2>
+            <div class="link-columns">
+                <div class="link-column">
+                    <h3>About Us</h3>
+                    <ul>
+                        <li><a href="{% url 'about' %}">About</a></li>
+                        <li><a href="{% url 'team' %}">Team</a></li>
+                    </ul>
+                </div>
+                <div class="link-column">
+                    <h3>Our Work</h3>
+                    <ul>
+                        <li><a href="{% url 'research' %}">Research</a></li>
+                        <li><a href="{% url 'projects' %}">Projects</a></li>
+                    </ul>
+                </div>
+                <div class="link-column">
+                    <h3>Connect</h3>
+                    <ul>
+                        <li><a href="{% url 'events' %}">Events</a></li>
+                        <li><a href="{% url 'blog_list' %}">Blog</a></li>
+                        <li><a href="{% url 'contact' %}">Contact</a></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}
