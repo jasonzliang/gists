@@ -13,15 +13,16 @@ The Rome AI Initiative website is built with Django, showcasing our research and
 
 ### Installation
 
-1. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
+1. Install dependencies
+2. Setup database
+3. Prepare static assets
 
-2. Prepare static assets:
-   ```bash
-   python manage.py collectstatic
-   ```
+```bash
+pip install -r requirements.txt
+python manage.py makemigrations
+python manage.py migrate
+python manage.py collectstatic
+```
 
 ## 🖥️ Running the Application
 
