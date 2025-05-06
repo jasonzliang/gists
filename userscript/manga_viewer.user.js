@@ -2638,8 +2638,8 @@ async function downloadImages(imageUrls, zipname, ui) {
 
     ui.status.textContent = 'Downloading images...';
 
-    // Create a worker pool with 4 concurrent workers
-    const concurrency = 4;
+    // Create a worker pool with 10 concurrent workers
+    const concurrency = 10;
     const total = imageUrls.length;
 
     // Setup progress tracking
