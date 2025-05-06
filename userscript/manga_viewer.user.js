@@ -1657,14 +1657,14 @@ var getViewer = function (prevUrl, nextUrl, prevChapter, nextChapter, imp) {
             'text-align': 'center',
         }, 'body'),
         imagesCss = toStyleStr({
-            'margin-top': '10px',
-            'margin-bottom': '10px',
+            'margin-top': '5px',
+            'margin-bottom': '5px',
             'transform-origin': 'top center'
         }, '.ml-images'),
         imageCss = toStyleStr({
             'max-width': '100%',
             'display': 'block',
-            'margin': '10px auto'
+            'margin': '5px auto'
         }, '.ml-images img'),
         counterCss = toStyleStr({
             'background-color': '#222',
