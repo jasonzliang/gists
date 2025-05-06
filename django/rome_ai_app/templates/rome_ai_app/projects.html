@@ -1,0 +1,39 @@
+{% extends 'rome_ai_app/base.html' %}
+{% load static %}
+
+{% block title %}Projects - Rome AI Initiative{% endblock %}
+{% block meta_description %}Explore the innovative AI projects developed by the Rome AI Initiative, from research prototypes to real-world applications.{% endblock %}
+
+{% block content %}
+<section class="page-header">
+    <div class="container">
+        <h1>Our Projects</h1>
+        <p>From research to real-world applications</p>
+    </div>
+</section>
+
+<section class="projects-showcase">
+    <div class="container">
+        <div class="projects-grid">
+            {% for project in projects %}
+            <div class="project-card">
+                {% if project.image %}
+                <div class="project-image">
+                    <img src="{{ project.image.url }}" alt="{{ project.title }}" loading="lazy">
+                </div>
+                {% endif %}
+                <div class="project-content">
+                    <h3>{{ project.title }}</h3>
+                    <p>{{ project.description|truncatewords:25 }}</p>
+                    <a href="{{ project.get_absolute_url }}" class="read-more">Learn More <i class="fas fa-arrow-right"></i></a>
+                </div>
+            </div>
+            {% empty %}
+            <div class="empty-state">
+                <p>Projects coming soon. Stay tuned!</p>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</section>
+{% endblock %}

@@ -1,0 +1,50 @@
+{% extends 'rome_ai_app/base.html' %}
+{% load static %}
+
+{% block title %}Events - Rome AI Initiative{% endblock %}
+{% block meta_description %}Join us for AI workshops, conferences, and meetups organized by the Rome AI Initiative. Discover our upcoming events in Rome.{% endblock %}
+
+{% block content %}
+<section class="page-header">
+    <div class="container">
+        <h1>Events</h1>
+        <p>Join us for workshops, conferences, and meetups</p>
+    </div>
+</section>
+
+<section class="events-calendar">
+    <div class="container">
+        <div class="events-list">
+            {% for event in events %}
+            <div class="event-card">
+                <div class="event-date">
+                    <span class="day">{{ event.date|date:"d" }}</span>
+                    <span class="month">{{ event.date|date:"M" }}</span>
+                </div>
+                <div class="event-details">
+                    <h3>{{ event.title }}</h3>
+                    <div class="event-meta">
+                        <span class="event-time"><i class="far fa-clock"></i> {{ event.date|date:"g:i A" }}</span>
+                        <span class="event-location">
+                            {% if event.is_virtual %}
+                            <i class="fas fa-laptop"></i> Virtual Event
+                            {% else %}
+                            <i class="fas fa-map-marker-alt"></i> {{ event.location }}
+                            {% endif %}
+                        </span>
+                    </div>
+                    <p>{{ event.description|truncatewords:30 }}</p>
+                    {% if event.registration_url %}
+                    <a href="{{ event.registration_url }}" class="btn btn-small" target="_blank" rel="noopener">Register Now</a>
+                    {% endif %}
+                </div>
+            </div>
+            {% empty %}
+            <div class="empty-state">
+                <p>No upcoming events at the moment. Check back soon!</p>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</section>
+{% endblock %}

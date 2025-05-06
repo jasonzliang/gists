@@ -1,0 +1,7 @@
+Django
+django-sitemaps
+pillow
+django-robots
+markdown
+whitenoise
+gunicorn

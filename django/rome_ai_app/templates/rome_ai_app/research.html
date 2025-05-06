@@ -1,0 +1,132 @@
+{% extends 'rome_ai_app/base.html' %}
+{% load static %}
+{% block title %}Research - Rome AI Initiative{% endblock %}
+{% block meta_description %}Discover our cutting-edge AI research at Rome AI Initiative, from neural networks to multimodal learning and ethical AI systems.{% endblock %}
+{% block content %}
+<section class="page-header">
+    <div class="container">
+        <h1>Our Research</h1>
+        <p>Exploring the frontiers of artificial intelligence</p>
+    </div>
+</section>
+<section class="research-areas">
+    <div class="container">
+        <div class="section-header">
+            <h2>Research Focus Areas</h2>
+            <p>Our teams work across multiple disciplines to advance AI capabilities</p>
+        </div>
+        <div class="research-categories">
+            <div class="category-filter active" data-category="all">All</div>
+            <div class="category-filter" data-category="deep-learning">Deep Learning</div>
+            <div class="category-filter" data-category="nlp">Natural Language Processing</div>
+            <div class="category-filter" data-category="computer-vision">Computer Vision</div>
+            <div class="category-filter" data-category="multimodal">Multimodal AI</div>
+            <div class="category-filter" data-category="responsible-ai">Responsible AI</div>
+        </div>
+        <div class="research-grid">
+            <!-- Research items will be populated here -->
+            <div class="research-card" data-categories="deep-learning computer-vision">
+                <div class="research-image">
+                    <img src="{% static 'rome_ai_app/img/research-1.jpg' %}" alt="Neural Architecture Research" loading="lazy">
+                </div>
+                <div class="research-content">
+                    <h3>Neural Architecture Search for Resource-Constrained Environments</h3>
+                    <p>Our team has developed a novel approach to automatically design neural networks that can operate efficiently on devices with limited computational resources.</p>
+                    <a href="#" class="read-more">Learn More <i class="fas fa-arrow-right"></i></a>
+                </div>
+            </div>
+            <div class="research-card" data-categories="computer-vision multimodal">
+                <div class="research-image">
+                    <img src="{% static 'rome_ai_app/img/research-2.jpg' %}" alt="Multimodal Learning Research" loading="lazy">
+                </div>
+                <div class="research-content">
+                    <h3>Multimodal Learning for Ancient Artifact Analysis</h3>
+                    <p>Combining computer vision and natural language processing to analyze and catalog ancient Roman artifacts with unprecedented accuracy.</p>
+                    <a href="#" class="read-more">Learn More <i class="fas fa-arrow-right"></i></a>
+                </div>
+            </div>
+            <div class="research-card" data-categories="deep-learning responsible-ai">
+                <div class="research-image">
+                    <img src="{% static 'rome_ai_app/img/research-3.jpg' %}" alt="Reinforcement Learning Research" loading="lazy">
+                </div>
+                <div class="research-content">
+                    <h3>Reinforcement Learning for Urban Planning Optimization</h3>
+                    <p>Developing AI systems that can help city planners optimize traffic flow, energy usage, and public transportation in Rome's historic center.</p>
+                    <a href="#" class="read-more">Learn More <i class="fas fa-arrow-right"></i></a>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<style>
+/* Additional CSS for smooth transitions */
+.research-card {
+    transition: all 0.3s ease;
+}
+
+.category-filter {
+    cursor: pointer;
+    transition: all 0.2s ease;
+    padding: 8px 16px;
+    margin: 0 5px;
+    border-radius: 4px;
+}
+
+.category-filter:hover {
+    opacity: 0.8;
+    background-color: #f5f5f5;
+}
+
+.category-filter.active {
+    font-weight: bold;
+    color: #0066cc; /* Your accent color */
+    background-color: #e6f0ff;
+}
+
+.research-categories {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-bottom: 30px;
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  // Get all filter buttons and research cards
+  const filterButtons = document.querySelectorAll('.category-filter');
+  const researchCards = document.querySelectorAll('.research-card');
+
+  // Add click event listener to each filter button
+  filterButtons.forEach(button => {
+    button.addEventListener('click', function() {
+      // Remove active class from all buttons
+      filterButtons.forEach(btn => btn.classList.remove('active'));
+
+      // Add active class to clicked button
+      this.classList.add('active');
+
+      // Get selected category
+      const selectedCategory = this.getAttribute('data-category');
+
+      // Filter research cards
+      researchCards.forEach(card => {
+        if (selectedCategory === 'all') {
+          // Show all cards if 'All' is selected
+          card.style.display = 'block';
+        } else {
+          // Check if card has the selected category
+          const cardCategories = card.getAttribute('data-categories').split(' ');
+          if (cardCategories.includes(selectedCategory)) {
+            card.style.display = 'block';
+          } else {
+            card.style.display = 'none';
+          }
+        }
+      });
+    });
+  });
+});
+</script>
+{% endblock %}
