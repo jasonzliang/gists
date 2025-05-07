@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Manga Speech Bubble Detector</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    #result-container {
+      margin-top: 20px;
+    }
+    #status {
+      margin: 10px 0;
+      padding: 8px;
+      background-color: #f0f0f0;
+      border-radius: 4px;
+    }
+    canvas {
+      max-width: 100%;
+      border: 1px solid #ddd;
+      margin: 10px 0;
+    }
+    .controls {
+      margin: 20px 0;
+    }
+    .bubble-text {
+      margin-bottom: 15px;
+      padding: 10px;
+      background-color: #f9f9f9;
+      border-left: 3px solid #2196F3;
+    }
+  </style>
+</head>
+<body>
+  <h1>Manga Speech Bubble Detector</h1>
+  <div class="controls">
+    <input type="file" id="file-input" accept="image/*">
+    <button id="process-button">Process Manga Page</button>
+  </div>
+  <div id="status">Initializing libraries...</div>
+  <div id="result-container"></div>
+
+  <!-- Load required libraries -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.1.1/dist/tesseract.min.js"></script>
+  <script>
+    // Wait for OpenCV.js to load
+    function onOpenCvReady() {
+      // Check if the status element exists before updating it
+      const statusElement = document.getElementById('status');
+      if (statusElement) {
+        statusElement.textContent = 'OpenCV.js is ready.';
+      } else {
+        console.warn('Status element not found, create one if needed.');
+        // Optionally create the element if it doesn't exist
+        const newStatus = document.createElement('div');
+        newStatus.id = 'status';
+        newStatus.textContent = 'OpenCV.js is ready.';
+        document.body.insertBefore(newStatus, document.getElementById('result-container'));
+      }
+    }
+  </script>
+  <script async src="https://docs.opencv.org/4.5.5/opencv.js" onload="onOpenCvReady()"></script>
+
+  <!-- Your JS code -->
+  <script src="ocr.js" type="module"></script>
+</body>
+</html>
