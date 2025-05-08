@@ -1657,14 +1657,15 @@ var getViewer = function (prevUrl, nextUrl, prevChapter, nextChapter, imp) {
             'text-align': 'center',
         }, 'body'),
         imagesCss = toStyleStr({
-            'margin-top': '10px',
-            'margin-bottom': '10px',
+            'margin-top': '8px',
+            'margin-bottom': '8px',
+            // 'margin': '8px auto',
             'transform-origin': 'top center'
         }, '.ml-images'),
         imageCss = toStyleStr({
             'max-width': '100%',
             'display': 'block',
-            'margin': '10px auto'
+            'margin': '8px auto'
         }, '.ml-images img'),
         counterCss = toStyleStr({
             'background-color': '#222',
@@ -1673,7 +1674,6 @@ var getViewer = function (prevUrl, nextUrl, prevChapter, nextChapter, imp) {
             'width': '30px',
             'margin-left': 'auto',
             'margin-right': 'auto',
-            'margin-top': 'auto',
             'padding-left': '5px',
             'padding-right': '5px',
             'border': '1px solid white',
@@ -1686,7 +1686,7 @@ var getViewer = function (prevUrl, nextUrl, prevChapter, nextChapter, imp) {
             'background-color': '#444',
             'padding': '3px 10px',
             'border-radius': '5px',
-            'transition': '250ms'
+            'transition': '250ms',
         }, '.ml-chap-nav a'),
         navHoverCss = toStyleStr({
             'background-color': '#555'
@@ -2638,8 +2638,8 @@ async function downloadImages(imageUrls, zipname, ui) {
 
     ui.status.textContent = 'Downloading images...';
 
-    // Create a worker pool with 4 concurrent workers
-    const concurrency = 4;
+    // Create a worker pool with 10 concurrent workers
+    const concurrency = 10;
     const total = imageUrls.length;
 
     // Setup progress tracking
