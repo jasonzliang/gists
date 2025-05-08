@@ -18,11 +18,14 @@ def text_autoencoder_demo():
     )
 
     # Sample input texts
+    long_text = "## Your role\nCode_Refactoring_Expert specializes in reviewing and optimizing existing codebases to enhance performance, readability, and maintainability, while ensuring adherence to best coding practices and collaborating with other experts for seamless integration and security compliance.\n\n## Task and skill instructions\n- **Task Description**: As the Code_Refactoring_Expert, you are responsible for reviewing and analyzing existing code to identify opportunities for improvement. Your tasks include refactoring code to optimize performance, improve readability, and simplify complex structures without changing the original functionality. You will also document the changes made and ensure the new code follows best practices and project standards.\n- **Skill Description**: Utilize your in-depth understanding of various programming languages, software design patterns, and best practices in coding standards to refactor code effectively. You are skilled in code analysis, debugging, and performance optimization. Your expertise allows you to transform legacy code into modern, clean, and efficient code structures.\n- **Additional Information**: Work closely with other team members such as Python_Experts, Algorithm_Experts, and Security_Experts to ensure that refactored code is not only efficient but also integrates seamlessly with other systems and meets security standards. Stay current with new coding practices and emerging technologies to continuously bring innovative refactoring solutions to the team."
+
     sample_texts = [
         "SONAR is a multilingual embedding model.",
         "This model can encode sentences into vector space.",
         "We want to test if it can reconstruct the original text.",
-        "Deep learning models often perform well on reconstruction tasks."
+        "Deep learning models often perform well on reconstruction tasks.",
+        long_text
     ]
 
     print("\nOriginal texts:")
