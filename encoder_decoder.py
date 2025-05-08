@@ -50,17 +50,18 @@ def text_autoencoder_demo():
         sample_texts,
         source_lang="eng_Latn",
         target_lang="eng_Latn")
-    print("Encoding/decoding time: %.2f sec" % time.time() - start)
+    print("Encoding/decoding time: %.2f sec" % (time.time() - start))
 
     print("\nReconstructed texts:")
     for i, text in enumerate(reconstructed_texts):
         print(f"{i+1}: {text}")
 
     # Compare original with reconstructed
-    print("\n\n\nComparison (original vs reconstructed):")
+    print("\n\nComparison (original vs reconstructed):")
     for i, (original, reconstructed) in enumerate(zip(sample_texts, reconstructed_texts)):
-        print(f"{i+1}: {'✓' if original == reconstructed else '✗'} | "
-            "Original:\n{original}\nReconstructed:\n{reconstructed}")
+        match = '✓' if original == reconstructed else '✗'
+        print(f"{i+1}: {match} | [Original]\n{original}"
+            f"\n[Reconstructed]\n{reconstructed}\n")
 
     # Optional: Try to implement a custom decoder function
     # This would require more knowledge of SONAR internals
