@@ -1,3 +1,7 @@
+import os
+import sys
+import time
+
 import torch
 from sonar.inference_pipelines.text import TextToEmbeddingModelPipeline, TextToTextModelPipeline
 
@@ -33,6 +37,7 @@ def text_autoencoder_demo():
         print(f"{i+1}: {text}")
 
     # Encode text to embeddings
+    start = time.time()
     print("\nEncoding texts to embeddings...")
     embeddings = t2vec_model.predict(sample_texts, source_lang="eng_Latn")
     print(f"Generated embeddings shape: {embeddings.shape}")
@@ -40,21 +45,22 @@ def text_autoencoder_demo():
     # Since there's no direct API to feed embeddings to the decoder,
     # we'll use the text-to-text pipeline with the same source and target language
     # to simulate an autoencoding process
-    print("\nReconstructing texts (using same language translation as proxy)...")
+    print("Reconstructing texts (using same language translation as proxy)...")
     reconstructed_texts = t2t_model.predict(
         sample_texts,
         source_lang="eng_Latn",
-        target_lang="eng_Latn"
-    )
+        target_lang="eng_Latn")
+    print("Encoding/decoding time: %.2f sec" % time.time() - start)
 
     print("\nReconstructed texts:")
     for i, text in enumerate(reconstructed_texts):
         print(f"{i+1}: {text}")
 
     # Compare original with reconstructed
-    print("\nComparison (original vs reconstructed):")
+    print("\n\n\nComparison (original vs reconstructed):")
     for i, (original, reconstructed) in enumerate(zip(sample_texts, reconstructed_texts)):
-        print(f"{i+1}: {'✓' if original == reconstructed else '✗'} | {original} | {reconstructed}")
+        print(f"{i+1}: {'✓' if original == reconstructed else '✗'} | "
+            "Original:\n{original}\nReconstructed:\n{reconstructed}")
 
     # Optional: Try to implement a custom decoder function
     # This would require more knowledge of SONAR internals
