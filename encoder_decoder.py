@@ -1,3 +1,4 @@
+import json
 import os
 import sys
 import time
@@ -249,7 +250,7 @@ class Vec2TextAutoencoder:
         embeddings = self.encode(texts)
         return self.decode(embeddings, num_steps, sequence_beam_width)
 
-def sonar_autoencoder_demo():
+def sonar_autoencoder_demo(sample_texts=None):
     print("Loading SONAR models...")
 
     # Initialize the text-to-embedding pipeline
@@ -266,13 +267,13 @@ def sonar_autoencoder_demo():
     )
 
     # Sample input texts
-    sample_texts = [
-        "SONAR is a multilingual embedding model.",
-        "This model can encode sentences into vector space.",
-        "We want to test if it can reconstruct the original text.",
-        "Deep learning models often perform well on reconstruction tasks.",
-        long_text
-    ]
+    if not sample_texts:
+        sample_texts = [
+            "SONAR is a multilingual embedding model.",
+            "This model can encode sentences into vector space.",
+            "We want to test if it can reconstruct the original text.",
+            "Deep learning models often perform well on reconstruction tasks."
+        ]
 
     print("\nOriginal texts:")
     for i, text in enumerate(sample_texts):
@@ -311,21 +312,21 @@ def sonar_autoencoder_demo():
     print("you would need to modify the SONAR codebase to access the decoder directly.")
     print("The approach above uses same-language translation as a proxy for autoencoding.")
 
-def vec2text_autoencoder_demo():
+def vec2text_autoencoder_demo(sample_texts=None):
     # Example using GTR-base model
     autoencoder = Vec2TextAutoencoder(embedding_model="gtr-base")
 
     # Example texts to reconstruct
-    sample_texts = [
-        "This is a test of the text autoencoder system",
-        "Deep learning techniques can be used for natural language processing tasks",
-        "The quick brown fox jumps over the lazy dog",
-        long_text
-    ]
+    if not sample_texts:
+        sample_texts = [
+            "This is a test of the text autoencoder system",
+            "Deep learning techniques can be used for natural language processing tasks",
+            "The quick brown fox jumps over the lazy dog"
+        ]
 
     print("Original texts:")
-    for text in sample_texts:
-        print(f"- {text}")
+    for i, text in enumerate(sample_texts):
+        print(f"{i+1}: {text}")
 
     # Encode to embeddings
     start = time.time()
@@ -340,7 +341,7 @@ def vec2text_autoencoder_demo():
 
     print("\nReconstructed texts:")
     for i, text in enumerate(reconstructed_texts):
-        print(f"- {text}")
+        print(f"{i+1}: {text}")
 
     # Evaluate reconstruction quality
     print("\nEvaluating reconstruction similarity:")
@@ -349,7 +350,14 @@ def vec2text_autoencoder_demo():
         similarity = len(set(original) & set(reconstructed)) / len(set(original) | set(reconstructed))
         print(f"Sample {i+1} similarity: {similarity:.2f}")
 
-if __name__ == "__main__":
-    vec2text_autoencoder_demo()
-    # sonar_autoencoder_demo()
+def load_sample_texts_from_json(
+    fp="~/Desktop/MetaGPT/experiments/config/8_3_best_multirole.json"):
+    fp = os.path.realpath(os.path.expanduser(fp))
+    with open(fp) as f:
+        role_dict = json.load(f)
+    return [x["system_message"] for x in role_dict["agent_configs"]]
 
+if __name__ == "__main__":
+    sample_texts = load_sample_texts_from_json()
+    vec2text_autoencoder_demo(sample_texts)
+    sonar_autoencoder_demo(sample_texts)
