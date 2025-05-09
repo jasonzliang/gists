@@ -796,14 +796,14 @@ def main():
         with st.expander('🔥 Advanced Options', expanded=False):  # Default collapsed for compactness
             col1, col2 = st.columns(2)  # Use two columns for more compact layout
             with col1:
-                temperature = st.slider('Temperature', min_value=0.0, max_value=1.0, value=0.1, step=0.01)
-                repetition_penalty = st.slider('Repetition Penalty', min_value=1.0, max_value=1.5, value=1.1, step=0.01)
-                max_input_tiles = st.slider('Max Input Tiles', min_value=1, max_value=12, value=12,
+                temperature = st.slider('Temperature', min_value=0.0, max_value=1.0, value=0.05, step=0.01)
+                repetition_penalty = st.slider('Repetition Penalty', min_value=1.0, max_value=1.5, value=1.08, step=0.01)
+                max_input_tiles = st.slider('Max Input Tiles', min_value=1, max_value=12, value=10,
                     step=1, help="Controls image resolution")
             with col2:
-                top_p = st.slider('Top-p', min_value=0.0, max_value=1.0, value=0.9, step=0.01)
-                max_length = st.slider('Max Tokens', min_value=0, max_value=1024, value=512, step=8)
-                num_beams = st.slider('Num Beams', min_value=1, max_value=6, value=3, step=1)
+                top_p = st.slider('Top-p', min_value=0.0, max_value=1.0, value=0.95, step=0.01)
+                max_length = st.slider('Max Tokens', min_value=8, max_value=1024, value=256, step=8)
+                num_beams = st.slider('Num Beams', min_value=1, max_value=6, value=1, step=1)
 
         # Clear history button - more compact
         clear_col = st.columns([1])[0]  # Single column for compact layout
