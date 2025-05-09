@@ -266,7 +266,7 @@ def load_model(model_path):
         return None, None
 
 # Response Generation
-def generate_response(messages, model, tokenizer, max_length, temperature, top_p, repetition_penalty, max_input_tiles):
+def generate_response(messages, model, tokenizer, max_length, temperature, top_p, repetition_penalty, max_input_tiles, num_beams):
     """Generate a response using the InternVL model"""
     placeholder = st.empty()
 
@@ -320,11 +320,12 @@ def generate_response(messages, model, tokenizer, max_length, temperature, top_p
 
     # Configure generation parameters
     generation_config = {
-        'max_new_tokens': max_length,
-        'do_sample': temperature > 0.01,
+        'max_new_tokens': int(max_length),
+        'do_sample': temperature > 0.0,
         'temperature': float(temperature),
         'top_p': float(top_p),
         'repetition_penalty': float(repetition_penalty),
+        'num_beams':int(num_beams)
     }
 
     # Generate response
@@ -364,21 +365,20 @@ def generate_response(messages, model, tokenizer, max_length, temperature, top_p
                 # Handle probability tensor error
                 if "inf" in str(e) or "nan" in str(e) or "< 0" in str(e):
                     st.warning("Encountered probability error. Trying conservative settings...")
-
                     # Fallback to greedy decoding
-                    fallback_config = {
-                        'max_new_tokens': max_length,
-                        'do_sample': False,
-                        'repetition_penalty': 1.0
-                    }
+                    # fallback_config = {
+                    #     'max_new_tokens': max_length,
+                    #     'do_sample': False,
+                    #     'repetition_penalty': 1.0
+                    # }
 
-                    if history is None:
-                        response = model.chat(tokenizer, pixel_values, question, fallback_config)
-                    else:
-                        response, _ = model.chat(tokenizer, pixel_values, question, fallback_config,
-                                             history=history, return_history=True)
-                else:
-                    raise e
+                    # if history is None:
+                    #     response = model.chat(tokenizer, pixel_values, question, fallback_config)
+                    # else:
+                    #     response, _ = model.chat(tokenizer, pixel_values, question, fallback_config,
+                    #                          history=history, return_history=True)
+                    # else:
+                raise e
 
             # Update display with the final response
             placeholder.markdown(response)
@@ -796,13 +796,14 @@ def main():
         with st.expander('🔥 Advanced Options', expanded=False):  # Default collapsed for compactness
             col1, col2 = st.columns(2)  # Use two columns for more compact layout
             with col1:
-                temperature = st.slider('Temperature', min_value=0.0, max_value=1.0, value=0.3, step=0.01)
+                temperature = st.slider('Temperature', min_value=0.0, max_value=1.0, value=0.1, step=0.01)
                 repetition_penalty = st.slider('Repetition Penalty', min_value=1.0, max_value=1.5, value=1.1, step=0.01)
                 max_input_tiles = st.slider('Max Input Tiles', min_value=1, max_value=12, value=12,
                     step=1, help="Controls image resolution")
             with col2:
                 top_p = st.slider('Top-p', min_value=0.0, max_value=1.0, value=0.9, step=0.01)
                 max_length = st.slider('Max Tokens', min_value=0, max_value=1024, value=512, step=8)
+                num_beams = st.slider('Num Beams', min_value=1, max_value=6, value=3, step=1)
 
         # Clear history button - more compact
         clear_col = st.columns([1])[0]  # Single column for compact layout
@@ -938,7 +939,7 @@ def main():
                     st.session_state.messages,
                     st.session_state.model,
                     st.session_state.tokenizer,
-                    max_length, temperature, top_p, repetition_penalty, max_input_tiles,
+                    max_length, temperature, top_p, repetition_penalty, max_input_tiles, num_beams,
                 )
 
                 # Create message for the assistant's response
