@@ -182,80 +182,112 @@
 
             if (!container) return;
 
-            // State object
+            // Improved state object
             const state = {
                 lock: false,
+                currentPage: 1, // Current page number
+                loadedPages: new Set([1]), // Track loaded page numbers
                 nextURL: null,
-                preloadedPages: [],
+                preloadedPages: [], // Store {pageNum, elements, nextURL}
                 preloadLimit: 3,
-                loadedCount: 1
+                maxPages: 100 // Safety limit
+            };
+
+            // Helper function to extract page number from URL
+            const getPageNum = (url) => {
+                try {
+                    const match = url.match(/\?p=(\d+)/);
+                    return match ? parseInt(match[1]) + 1 : 1; // URLs are 0-indexed, display is 1-indexed
+                } catch (e) {
+                    return null;
+                }
             };
 
             // Initial page setup
             const thisPage = await fetchPage(location.href, selectors);
+
+            // Clear the container
             while (container.firstChild) container.firstChild.remove();
 
+            // Add current page elements
             thisPage.elements.filter(el => !el.classList.contains('c'))
                 .forEach(el => container.appendChild(el));
 
+            // Set next URL
             state.nextURL = thisPage.nextURL;
             if (!state.nextURL) return;
 
-            // Preload next pages
-            const preloadNext = async () => {
-                if (state.preloadLimit <= 0 || !state.nextURL ||
-                    state.preloadedPages.length >= state.preloadLimit) return;
+            // Preload specific page
+            const preloadPage = async (url, pageNum) => {
+                if (!url || state.loadedPages.has(pageNum)) return null;
 
-                const nextPage = await fetchPage(state.nextURL, selectors);
-                if (nextPage.elements.length) {
-                    state.preloadedPages.push({
-                        elements: nextPage.elements.filter(el => !el.classList.contains('c')),
-                        nextURL: nextPage.nextURL
-                    });
-
-                    state.nextURL = nextPage.nextURL;
-
-                    if (nextPage.nextURL && state.preloadedPages.length < state.preloadLimit)
-                        preloadNext();
+                try {
+                    const page = await fetchPage(url, selectors);
+                    if (page.elements.length > 0) {
+                        return {
+                            pageNum: pageNum,
+                            elements: page.elements.filter(el => !el.classList.contains('c')),
+                            nextURL: page.nextURL
+                        };
+                    }
+                } catch (e) {
+                    console.error(`Error preloading page ${pageNum}:`, e);
                 }
+                return null;
             };
 
-            // Load initial pages
-            const loadInitialPages = async () => {
-                if (state.preloadLimit <= 0) return;
+            // Preload multiple pages sequentially
+            const preloadNextPages = async () => {
+                if (!state.nextURL || state.lock) return;
 
-                state.lock = true;
-                let remaining = state.preloadLimit,
-                    currentURL = state.nextURL;
+                let currentURL = state.nextURL;
+                let pagesAdded = 0;
 
-                while (remaining > 0 && currentURL) {
-                    const nextPage = await fetchPage(currentURL, selectors);
-                    if (nextPage.elements.length) {
-                        insertDivider(container, state.loadedCount + 1);
+                while (currentURL && pagesAdded < state.preloadLimit) {
+                    const nextPageNum = getPageNum(currentURL);
 
-                        nextPage.elements.filter(el => !el.classList.contains('c'))
-                            .forEach(el => container.appendChild(el));
+                    // Skip if already loaded or preloaded
+                    if (state.loadedPages.has(nextPageNum) ||
+                        state.preloadedPages.some(p => p.pageNum === nextPageNum)) {
+                        break;
+                    }
 
+                    const nextPage = await preloadPage(currentURL, nextPageNum);
+                    if (nextPage) {
+                        state.preloadedPages.push(nextPage);
                         currentURL = nextPage.nextURL;
-                        state.loadedCount++;
-                        remaining--;
+                        pagesAdded++;
                     } else {
-                        currentURL = null;
+                        break;
                     }
                 }
-
-                state.nextURL = currentURL;
-                state.lock = false;
-
-                if (state.preloadLimit > 0) preloadNext();
             };
 
-            // Start loading
-            loadInitialPages();
+            // Load and display a page
+            const displayPage = (pageData) => {
+                if (!pageData || state.loadedPages.has(pageData.pageNum)) return false;
+
+                // Mark as loaded
+                state.loadedPages.add(pageData.pageNum);
+
+                // Add divider with correct page number
+                insertDivider(container, pageData.pageNum);
+
+                // Add page elements
+                pageData.elements.forEach(el => container.appendChild(el));
+
+                // Update state
+                state.currentPage = pageData.pageNum;
+
+                return true;
+            };
+
+            // Start preloading
+            preloadNextPages();
 
             // Scroll handler
             document.addEventListener('scroll', throttle(() => {
-                if (state.lock) return;
+                if (state.lock || state.loadedPages.size >= state.maxPages) return;
 
                 const ptbElement = $('table.ptb');
                 if (!ptbElement) return;
@@ -267,33 +299,57 @@
 
                 state.lock = true;
 
-                if (state.preloadedPages.length) {
-                    const nextPage = state.preloadedPages.shift();
-                    insertDivider(container, state.loadedCount + 1);
+                // Process function - handles displaying next page and updating state
+                const processNextPage = async () => {
+                    try {
+                        // First try to use a preloaded page
+                        if (state.preloadedPages.length > 0) {
+                            // Sort by page number to ensure order
+                            state.preloadedPages.sort((a, b) => a.pageNum - b.pageNum);
+                            const nextPage = state.preloadedPages.shift();
 
-                    nextPage.elements.forEach(el => container.appendChild(el));
-                    state.loadedCount++;
+                            // Display the page
+                            const displayed = displayPage(nextPage);
 
-                    if (state.preloadLimit > 0) preloadNext();
-                    state.lock = false;
-                } else if (state.nextURL) {
-                    (async () => {
-                        const nextPage = await fetchPage(state.nextURL, selectors);
-                        insertDivider(container, state.loadedCount + 1);
+                            if (displayed && nextPage.nextURL) {
+                                state.nextURL = nextPage.nextURL;
 
-                        nextPage.elements.filter(el => !el.classList.contains('c'))
-                            .forEach(el => container.appendChild(el));
+                                // Preload more pages if needed
+                                if (state.preloadedPages.length < state.preloadLimit) {
+                                    setTimeout(() => preloadNextPages(), 100);
+                                }
+                            }
+                        }
+                        // If no preloaded pages, fetch the next one directly
+                        else if (state.nextURL) {
+                            const nextPageNum = getPageNum(state.nextURL);
 
-                        state.nextURL = nextPage.nextURL;
-                        state.loadedCount++;
+                            // Skip if already loaded
+                            if (!state.loadedPages.has(nextPageNum)) {
+                                const pageData = await preloadPage(state.nextURL, nextPageNum);
 
-                        if (state.preloadLimit > 0 && state.nextURL) preloadNext();
+                                if (pageData) {
+                                    // Display the page
+                                    displayPage(pageData);
+
+                                    // Update next URL
+                                    state.nextURL = pageData.nextURL;
+
+                                    // Preload more pages
+                                    setTimeout(() => preloadNextPages(), 100);
+                                }
+                            }
+                        }
+                    } catch (e) {
+                        console.error("Error processing next page:", e);
+                    } finally {
                         state.lock = false;
-                    })();
-                } else {
-                    state.lock = false;
-                }
-            }));
+                    }
+                };
+
+                // Process next page
+                processNextPage();
+            }, 250)); // Slightly higher throttle time for better performance
         })();
     }
 
