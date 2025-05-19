@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name Manga Loader NSFW + Download
-// @version 1.5.0
+// @version 1.5.2
 // @description This is an unofficial fork of https://greasyfork.org/fr/scripts/12657-manga-loader-nsfw all credits goes to the original author, This script add a button to download the chapter
 // @author viatana35, Anon
 // @icon https://i.pinimg.com/736x/52/7f/ef/527fef673463dde3d1be2250b7120864.jpg
