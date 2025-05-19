@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name       Unlock Hath Perks
-// @name:zh-TW 解鎖 Hath Perks
-// @name:zh-CN 解锁 Hath Perks
-// @description       Unlock Hath Perks and add other helpers
+// @name        Unlock Hath Perks
+// @name:zh-TW  解鎖 Hath Perks
+// @name:zh-CN  解锁 Hath Perks
+// @description Unlock Hath Perks and add other helpers
 // @description:zh-TW 解鎖 Hath Perks 及增加一些小工具
 // @description:zh-CN 解锁 Hath Perks 及增加一些小工具
 // @namespace   https://flandre.in/github
@@ -16,12 +16,12 @@
 // @grant       GM_setValue
 // @grant       GM.setValue
 // @noframes
-// @author      FlandreDaisuki
+// @author      FlandreDaisuki, Anon
 // @supportURL  https://github.com/FlandreDaisuki/My-Browser-Extensions/issues
 // @homepageURL https://github.com/FlandreDaisuki/My-Browser-Extensions/blob/master/userscripts/UnlockHathPerks/README.md
 // @license     MPLv2
 // @downloadURL https://github.com/jasonzliang/gists/raw/refs/heads/master/userscripts/infinite_scroll.user.js
-// @updateURL https://github.com/jasonzliang/gists/raw/refs/heads/master/userscripts/infinite_scroll.user.js
+// @updateURL   https://github.com/jasonzliang/gists/raw/refs/heads/master/userscripts/infinite_scroll.user.js
 // ==/UserScript==
 
 (function () {
