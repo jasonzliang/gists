@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Google Image Translator
 // @namespace    https://github.com/yourusername
-// @version      1.3
+// @version      1.3.1
 // @description  Translate text in images using Google Cloud Vision and Translation APIs
 // @icon         https://www.svgrepo.com/show/375395/cloud-vision-api.svg
 // @author       Anon
