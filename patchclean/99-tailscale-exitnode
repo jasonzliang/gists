@@ -1,0 +1,110 @@
+#!/bin/sh
+
+# This script both checks Tailscale exit node status and ensures it runs at boot
+# Save as /etc/uci-defaults/99-tailscale-exitnode and make executable
+
+# Function to check and enable Tailscale exit node
+check_tailscale_exit_node() {
+    # Check if Tailscale is installed
+    if ! command -v tailscale >/dev/null 2>&1; then
+        logger -t tailscale_exitnode "Tailscale is not installed"
+        return 1
+    fi
+
+    # Check if Tailscale service is running
+    if ! pgrep tailscaled >/dev/null; then
+        logger -t tailscale_exitnode "Tailscale daemon is not running"
+        # Attempt to start tailscale
+        if [ -x /etc/init.d/tailscale ]; then
+            logger -t tailscale_exitnode "Starting Tailscale service"
+            /etc/init.d/tailscale start
+            sleep 5  # Give it time to start
+        else
+            logger -t tailscale_exitnode "Tailscale init script not found"
+            return 1
+        fi
+    fi
+
+    # Check if Tailscale is connected
+    TAILSCALE_STATUS=$(tailscale status --json 2>/dev/null)
+    if [ $? -ne 0 ] || [ -z "$TAILSCALE_STATUS" ]; then
+        logger -t tailscale_exitnode "Failed to get Tailscale status"
+        return 1
+    fi
+
+    # Check if exit node is disabled and enable it if needed
+    EXITNODE_STATUS=$(echo "$TAILSCALE_STATUS" | jsonfilter -e '$.Self.ExitNodeOption')
+
+    if [ "$EXITNODE_STATUS" != "true" ]; then
+        logger -t tailscale_exitnode "Exit node is disabled, enabling it now"
+        tailscale up --advertise-exit-node --accept-dns=true --accept-routes --advertise-routes=0.0.0.0/0,::/0,192.168.0.0/16
+        logger -t tailscale_exitnode "Exit node has been enabled"
+    else
+        logger -t tailscale_exitnode "Exit node is already enabled"
+    fi
+    
+    return 0
+}
+
+# Add to rc.local to run this script at boot
+setup_boot_execution() {
+    if ! grep -q "/etc/uci-defaults/99-tailscale-exitnode" /etc/rc.local 2>/dev/null; then
+        # Create rc.local if it doesn't exist
+        [ ! -f /etc/rc.local ] && {
+            cat > /etc/rc.local <<'EOF'
+#!/bin/sh
+# Put your custom commands here that should be executed once
+# the system init finished. By default this file does nothing.
+
+exit 0
+EOF
+            chmod +x /etc/rc.local
+        }
+        
+        # Add our script before the exit line
+        sed -i '/exit 0/i /etc/uci-defaults/99-tailscale-exitnode check &' /etc/rc.local
+    fi
+}
+
+# Set up cron job
+setup_cron() {
+    crontab -l 2>/dev/null > /tmp/current_cron || echo "" > /tmp/current_cron
+    if ! grep -q "99-tailscale-exitnode" /tmp/current_cron; then
+        echo "# Check tailscale exit node status every hour" >> /tmp/current_cron
+        echo "0 * * * * /etc/uci-defaults/99-tailscale-exitnode check" >> /tmp/current_cron
+        sort -u /tmp/current_cron | crontab -
+    fi
+    rm -f /tmp/current_cron
+}
+
+# Ensure the script is preserved during upgrades
+setup_sysupgrade_preservation() {
+    if [ -d /etc/sysupgrade.conf.d ]; then
+        echo "/etc/uci-defaults/99-tailscale-exitnode" > /etc/sysupgrade.conf.d/tailscale-exitnode
+    elif [ -f /etc/sysupgrade.conf ]; then
+        grep -q "^/etc/uci-defaults/99-tailscale-exitnode$" /etc/sysupgrade.conf || \
+            echo "/etc/uci-defaults/99-tailscale-exitnode" >> /etc/sysupgrade.conf
+    fi
+}
+
+# Main execution
+case "$1" in
+    check)
+        # Just check and enable exit node
+        check_tailscale_exit_node
+        ;;
+    *)
+        # First time installation - set up everything
+        setup_boot_execution
+        setup_cron
+        setup_sysupgrade_preservation
+        
+        # Run the check now
+        check_tailscale_exit_node
+        
+        # Since this is a uci-defaults script, we should return 0
+        # to prevent it from being deleted after first boot
+        # This makes it persistent between upgrades
+        exit 1
+        ;;
+esac
