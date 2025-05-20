@@ -2213,7 +2213,6 @@ var getViewer = function (prevUrl, nextUrl, prevChapter, nextChapter, imp) {
     });
 
     // Modify the changeZoom function to apply zoom to all images simultaneously
-    var nominalZoom = storeGet('mDefaultZoom') || 100;
     var changeZoom = function (action, elem) {
         var ratioZoom = (document.documentElement.scrollTop || document.body.scrollTop) / (document.documentElement.scrollHeight || document.body.scrollHeight);
         var curImage = getCurrentImage();
@@ -2784,6 +2783,7 @@ function saveZoomLevels() {
 }
 
 // Modify the addImage function to initialize zoom for each image
+var nominalZoom = storeGet('mDefaultZoom') || 100;
 var addImage = function (src, loc, imgNum, callback) {
     var image = new Image(),
         counter = getCounter(imgNum);
@@ -2805,7 +2805,7 @@ var addImage = function (src, loc, imgNum, callback) {
 
     // Initialize zoom level for this image
     if (!imageZoomLevels[imgNum]) {
-        imageZoomLevels[imgNum] = storeGet('mDefaultZoom') || 100;
+        imageZoomLevels[imgNum] = nominalZoom;
     }
 
     // Modify the onload handler
