@@ -2279,7 +2279,7 @@ var getViewer = function (prevUrl, nextUrl, prevChapter, nextChapter, imp) {
         var nextPage = getEl('#' + nextId.join('-'));
         if (nextPage == null) {
             log(curId + " > " + nextId);
-            log("Reached the end!");
+            log('reached the end!');
         } else {
             nextPage.scrollIntoView();
         }
@@ -2367,7 +2367,7 @@ var getViewer = function (prevUrl, nextUrl, prevChapter, nextChapter, imp) {
 
 // Improved version using JSZip to download all images as a single zip file
 function downloadChapter() {
-    log('Starting download process...');
+    log('starting download process...');
 
     try {
         // Extract chapter info from URL
@@ -2381,7 +2381,7 @@ function downloadChapter() {
         const imageUrls = Array.from(imageElements).map(img => img.src);
 
         if (imageUrls.length === 0) {
-            alert('No images found. Are you on the correct page?');
+            alert('no images found, are you on the correct page?');
             return;
         }
 
@@ -2587,7 +2587,7 @@ function addDownloadButton(chapterUrl) {
 
     // Add button to the page
     document.body.appendChild(button);
-    log('Download button added to page');
+    log('download button added to page');
 }
 
 // Load JSZip library and initialize
@@ -2600,7 +2600,7 @@ function loadJSZip() {
     };
     script.onerror = function () {
         console.error('Failed to load JSZip');
-        alert('Failed to load JSZip library. Please check your internet connection.');
+        alert('failed to load JSZip library, please check internet');
     };
     document.head.appendChild(script);
 }
