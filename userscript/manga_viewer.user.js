@@ -1874,16 +1874,16 @@ var getViewer = function (prevUrl, nextUrl, prevChapter, nextChapter, imp) {
             var shouldReload = evt.target.href.indexOf('#') !== -1 && evt.target.href.split('#')[0] === document.location.href.split('#')[0] && evt.button === 0; // fix for batoto https weirdness
             if (evt.target.className.indexOf('ml-chap') !== -1) {
                 log('next chapter will autoload');
-                storeSet('autoload', 'yes');
+                storeSet('autoload', true);
                 if (shouldReload) {
                     evt.preventDefault();
                     location.href = evt.target.href;
                     location.reload(true);
                 }
             } else if (evt.target.className.indexOf('ml-exit') !== -1) {
-                log('exiting chapter, stop autoload');
-                storeSet('autoload', 'no');
-                // storeSet('mAutoload', false); // Disabled for better behavior
+                log('exiting chapter');
+                storeSet('autoload', false);
+                storeSet('mAutoload', false);
                 if (shouldReload) {
                     evt.preventDefault();
                     location.reload(true);
@@ -2995,7 +2995,7 @@ var MLoaderLoadImps = function (imps) {
         if (imp.match && (new RegExp(imp.match, 'i')).test(pageUrl)) {
             currentImpName = imp.name;
 
-            if (W.BM_MODE || (autoload !== 'no' && (mAutoload || autoload))) {
+            if (W.BM_MODE || mAutoload || autoload) {
                 log('autoloading...');
                 waitAndLoad(imp);
                 return true;
@@ -3040,9 +3040,9 @@ var pageUrl = window.location.href,
 // indicates whether UI loaded
 var isLoaded = false;
 // used when switching chapters
-var autoload = storeGet('autoload');
+var autoload = storeGet('autoload') || true;
 // manually set by user in menu
-var mAutoload = storeGet('mAutoload') || false;
+var mAutoload = storeGet('mAutoload') || true;
 // should we load less pages at a time?
 var mLoadNum = storeGet('mLoadNum') || 10;
 // holder for statistics
@@ -3069,9 +3069,9 @@ if (!storeGet('mDefaultZoom')) {
 W.document.addEventListener('DOMContentLoaded', function (e) {
     if (!isLoaded) return;
     // used when switching chapters
-    autoload = storeGet('autoload');
+    autoload = storeGet('autoload') || true;
     // manually set by user in menu
-    mAutoload = storeGet('mAutoload') || false;
+    mAutoload = storeGet('mAutoload') || true;
     // should we load less pages at a time?
     mLoadNum = storeGet('mLoadNum') || 10;
     if (autoload || mAutoload) {
