@@ -1883,7 +1883,7 @@ var getViewer = function (prevUrl, nextUrl, prevChapter, nextChapter, imp) {
             } else if (evt.target.className.indexOf('ml-exit') !== -1) {
                 log('exiting chapter, stop autoload');
                 storeSet('autoload', 'no');
-                storeSet('mAutoload', false); // Add this line
+                // storeSet('mAutoload', false); // Disabled for better behavior
                 if (shouldReload) {
                     evt.preventDefault();
                     location.reload(true);
