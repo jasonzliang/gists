@@ -2324,9 +2324,9 @@ var getViewer = function (prevUrl, nextUrl, prevChapter, nextChapter, imp) {
         var code = evt.which || evt.charCode || evt.keyCode;
         // stop propagation if key is registered
         if (code in UI.keys) {
-            evt.preventDefault();
+            // evt.preventDefault();
+            // evt.stopImmediatePropagation();
             evt.stopPropagation();
-            evt.stopImmediatePropagation();
         }
         // perform action
         switch (code) {
