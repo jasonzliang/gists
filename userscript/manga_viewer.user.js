@@ -1662,7 +1662,7 @@ var getViewer = function (prevUrl, nextUrl, prevChapter, nextChapter, imp) {
             'background-color': '#222',
             'padding': '3px 10px',
             'border-radius': '5px',
-            'border': '1px solid #666',
+            // 'border': '1px solid #666',
             'transition': '250ms',
             'opacity': '0.4',
         }, '.ml-chap-nav a'),
