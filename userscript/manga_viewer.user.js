@@ -1629,7 +1629,7 @@ var getViewer = function (prevUrl, nextUrl, prevChapter, nextChapter, imp) {
 
     var viewerCss = toStyleStr({
             'background-color': originalBgColor + ' !important',
-            'font': '0.813em monospace !important',
+            'font': '0.9em monospace !important',
             'text-align': 'center',
         }, 'body'),
         imagesCss = toStyleStr({
@@ -1652,20 +1652,20 @@ var getViewer = function (prevUrl, nextUrl, prevChapter, nextChapter, imp) {
             'margin-right': 'auto',
             'padding-left': '5px',
             'padding-right': '5px',
-            'border': '1px solid white',
+            // 'border': '1px solid white',
             'z-index': '100',
             'position': 'relative'
         }, '.ml-counter'),
         navCss = toStyleStr({
             'text-decoration': 'none',
             'color': 'white',
-            'background-color': '#444',
+            'background-color': '#222',
             'padding': '3px 10px',
             'border-radius': '5px',
             'transition': '250ms',
         }, '.ml-chap-nav a'),
         navHoverCss = toStyleStr({
-            'background-color': '#555'
+            'background-color': '#444'
         }, '.ml-chap-nav a:hover'),
         boxCss = toStyleStr({
             'position': 'fixed',
