@@ -1871,21 +1871,22 @@ var getViewer = function (prevUrl, nextUrl, prevChapter, nextChapter, imp) {
     // set up listeners
     document.addEventListener('click', function (evt) {
         if (evt.target.nodeName === 'A' && evt.button !== 2) {
-            var shouldReload = evt.target.href.indexOf('#') !== -1 && evt.target.href.split('#')[0] === document.location.href.split('#')[0] && evt.button === 0; // fix for batoto https weirdness
+            if (evt.target.className.indexOf('ml-exit') !== -1) {
+                log('exiting chapter');
+                storeSet('autoload', false);
+                sessionStorage.setItem('tempDisableAutoload', '1');
+                // Let browser handle navigation naturally - no preventDefault needed
+                return;
+            }
+
+            var shouldReload = evt.target.href.indexOf('#') !== -1 && evt.target.href.split('#')[0] === document.location.href.split('#')[0] && evt.button === 0;
+
             if (evt.target.className.indexOf('ml-chap') !== -1) {
                 log('next chapter will autoload');
                 storeSet('autoload', true);
                 if (shouldReload) {
                     evt.preventDefault();
                     location.href = evt.target.href;
-                    location.reload(true);
-                }
-            } else if (evt.target.className.indexOf('ml-exit') !== -1) {
-                log('exiting chapter');
-                storeSet('autoload', false);
-                storeSet('mAutoload', false);
-                if (shouldReload) {
-                    evt.preventDefault();
                     location.reload(true);
                 }
             }
@@ -2995,7 +2996,7 @@ var MLoaderLoadImps = function (imps) {
         if (imp.match && (new RegExp(imp.match, 'i')).test(pageUrl)) {
             currentImpName = imp.name;
 
-            if (W.BM_MODE || mAutoload || autoload) {
+            if ((W.BM_MODE || mAutoload || autoload) && !tempDisableAutoload) {
                 log('autoloading...');
                 waitAndLoad(imp);
                 return true;
@@ -3040,9 +3041,14 @@ var pageUrl = window.location.href,
 // indicates whether UI loaded
 var isLoaded = false;
 // used when switching chapters
-var autoload = storeGet('autoload');
+var autoload = storeGet('autoload') !== null ? storeGet('autoload') : true;
 // manually set by user in menu
-var mAutoload = storeGet('mAutoload');
+var mAutoload = storeGet('mAutoload') !== null ? storeGet('mAutoload') : true;
+// temporary disable for current page only
+var tempDisableAutoload = sessionStorage.getItem('tempDisableAutoload') === '1';
+if (tempDisableAutoload) {
+    sessionStorage.removeItem('tempDisableAutoload'); // Clear it
+}
 // should we load less pages at a time?
 var mLoadNum = storeGet('mLoadNum') || 10;
 // holder for statistics
@@ -3068,15 +3074,13 @@ if (!storeGet('mDefaultZoom')) {
 // extra check for settings (hack) on dumb firefox/scriptish, settings aren't updated until document end
 W.document.addEventListener('DOMContentLoaded', function (e) {
     if (!isLoaded) return;
-    // Only default to true if the value has never been set (null/undefined)
-    var storedAutoload = storeGet('autoload');
-    var storedMAutoload = storeGet('mAutoload');
-
-    autoload = storedAutoload !== null ? storedAutoload : true;
-    mAutoload = storedMAutoload !== null ? storedMAutoload : true;
+    // used when switching chapters
+    autoload = storeGet('autoload') !== null ? storeGet('autoload') : true;
+    // manually set by user in menu
+    mAutoload = storeGet('mAutoload') !== null ? storeGet('mAutoload') : true;
+    // should we load less pages at a time?
     mLoadNum = storeGet('mLoadNum') || 10;
-
-    if (autoload || mAutoload) {
+    if ((autoload || mAutoload) && !tempDisableAutoload) {
         btnLoad.click();
     }
 });
