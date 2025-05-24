@@ -1,13 +1,50 @@
 // ==UserScript==
 // @name         Google Image Translator
 // @namespace    https://github.com/yourusername
-// @version      2.0.0
+// @version      2.1.0
 // @description  Translate text in images using Google Cloud Vision and Translation APIs
 // @icon         https://www.svgrepo.com/show/375395/cloud-vision-api.svg
 // @author       Anon
 // @noframes
-// @match        https://e-hentai.org/*
-// @match        https://exhentai.org/*
+// -- NSFW START
+// @match *://dynasty-scans.com/chapters/*
+// @match *://hentaifr.net/*
+// @match *://prismblush.com/comic/*
+// @match *://www.hentairules.net/galleries*/picture.php*
+// @match *://pururin.us/read/*
+// @match *://hitomi.la/reader/*
+// @match *://*.doujins.com/*
+// @match *://www.8muses.com/comix/picture/*/*/*/*
+// @match *://nowshelf.com/watch/*
+// @match *://nhentai.net/g/*/*
+// @match *://e-hentai.org/s/*/*
+// @match *://exhentai.org/s/*/*
+// @match *://www.fakku.net/*/*/read*
+// @match *://hentaihere.com/m/*/*/*
+// @match *://www.hentaihere.com/m/*/*/*
+// @match *://*.tsumino.com/Read/View/*
+// @match *://www.hentaibox.net/*/*
+// @match *://*.hentai-free.org/*
+// @match *://*.mangafap.com/image/*
+// @match *://*.hentai4manga.com/hentai_manga/*
+// @match *://*.heymanga.me/manga/*
+// @match *://*.simply-hentai.com/*/page/*
+// @match *://*.gameofscanlation.moe/projects/*/*
+// @match *://*.luscious.net/c/*/pictures/album/*/id/*
+// @match *://*.hentaifox.com/g/*
+// @match *://*.hentai2read.com/*/*/*
+// @match *://*.hentai.ms/manga/*/*
+// -- NSFW END
+// -- FOOLSLIDE NSFW START
+// @match *://reader.yuriproject.net/read/*
+// @match *://ecchi.japanzai.com/read/*
+// @match *://h.japanzai.com/read/*
+// @match *://reader.japanzai.com/read/*
+// @match *://yomanga.co/reader/read/*
+// @match *://raws.yomanga.co/read/*
+// @match *://hentai.cafe/manga/read/*
+// @match *://*.yuri-ism.net/slide/read/*
+// -- FOOLSLIDE NSFW END
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_xmlhttpRequest
