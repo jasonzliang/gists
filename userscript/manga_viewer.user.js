@@ -1644,7 +1644,7 @@ var getViewer = function (prevUrl, nextUrl, prevChapter, nextChapter, imp) {
             'margin': '8px auto'
         }, '.ml-images img'),
         counterCss = toStyleStr({
-            'background-color': '#222',
+            'background-color': '#000',
             'color': 'white',
             'border-radius': '10px',
             'width': '30px',
@@ -1652,21 +1652,21 @@ var getViewer = function (prevUrl, nextUrl, prevChapter, nextChapter, imp) {
             'margin-right': 'auto',
             'padding-left': '5px',
             'padding-right': '5px',
-            'border': '1px solid white',
+            // 'border': '1px solid white',
             'z-index': '100',
             'position': 'relative'
         }, '.ml-counter'),
         navCss = toStyleStr({
             'text-decoration': 'none',
             'color': 'white',
-            'background-color': '#222',
+            'background-color': '#000',
             'padding': '3px 10px',
             'border-radius': '5px',
-            'border': '1px solid white',
+            // 'border': '1px solid white',
             'transition': '250ms',
         }, '.ml-chap-nav a'),
         navHoverCss = toStyleStr({
-            'background-color': '#444'
+            'background-color': '#222'
         }, '.ml-chap-nav a:hover'),
         boxCss = toStyleStr({
             'position': 'fixed',
