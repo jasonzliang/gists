@@ -1652,7 +1652,7 @@ var getViewer = function (prevUrl, nextUrl, prevChapter, nextChapter, imp) {
             'margin-right': 'auto',
             'padding-left': '5px',
             'padding-right': '5px',
-            // 'border': '1px solid white',
+            'border': '1px solid white',
             'z-index': '100',
             'position': 'relative'
         }, '.ml-counter'),
@@ -1662,6 +1662,7 @@ var getViewer = function (prevUrl, nextUrl, prevChapter, nextChapter, imp) {
             'background-color': '#222',
             'padding': '3px 10px',
             'border-radius': '5px',
+            'border': '1px solid white',
             'transition': '250ms',
         }, '.ml-chap-nav a'),
         navHoverCss = toStyleStr({
