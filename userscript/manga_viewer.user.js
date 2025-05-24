@@ -3040,9 +3040,9 @@ var pageUrl = window.location.href,
 // indicates whether UI loaded
 var isLoaded = false;
 // used when switching chapters
-var autoload = storeGet('autoload') || true;
+var autoload = storeGet('autoload');
 // manually set by user in menu
-var mAutoload = storeGet('mAutoload') || true;
+var mAutoload = storeGet('mAutoload');
 // should we load less pages at a time?
 var mLoadNum = storeGet('mLoadNum') || 10;
 // holder for statistics
@@ -3068,12 +3068,14 @@ if (!storeGet('mDefaultZoom')) {
 // extra check for settings (hack) on dumb firefox/scriptish, settings aren't updated until document end
 W.document.addEventListener('DOMContentLoaded', function (e) {
     if (!isLoaded) return;
-    // used when switching chapters
-    autoload = storeGet('autoload') || true;
-    // manually set by user in menu
-    mAutoload = storeGet('mAutoload') || true;
-    // should we load less pages at a time?
+    // Only default to true if the value has never been set (null/undefined)
+    var storedAutoload = storeGet('autoload');
+    var storedMAutoload = storeGet('mAutoload');
+
+    autoload = storedAutoload !== null ? storedAutoload : true;
+    mAutoload = storedMAutoload !== null ? storedMAutoload : true;
     mLoadNum = storeGet('mLoadNum') || 10;
+
     if (autoload || mAutoload) {
         btnLoad.click();
     }
