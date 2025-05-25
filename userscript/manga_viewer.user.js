@@ -57,8 +57,8 @@
 // *************************
 // @require https://cdnjs.cloudflare.com/ajax/libs/jszip/3.9.1/jszip.min.js
 // @require https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js
-// @downloadURL https://github.com/jasonzliang/gists/raw/refs/heads/master/userscripts/manga_viewer.user.js
-// @updateURL https://github.com/jasonzliang/gists/raw/refs/heads/master/userscripts/manga_viewer.user.js
+// @downloadURL https://github.com/jasonzliang/gists/raw/refs/heads/master/userscript/manga_viewer.user.js
+// @updateURL https://github.com/jasonzliang/gists/raw/refs/heads/master/userscript/manga_viewer.user.js
 // ==/UserScript==
 
 /**
