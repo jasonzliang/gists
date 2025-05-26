@@ -20,8 +20,8 @@
 // @supportURL  https://github.com/FlandreDaisuki/My-Browser-Extensions/issues
 // @homepageURL https://github.com/FlandreDaisuki/My-Browser-Extensions/blob/master/userscripts/UnlockHathPerks/README.md
 // @license     MPLv2
-// @downloadURL https://github.com/jasonzliang/gists/raw/refs/heads/master/userscripts/infinite_scroll.user.js
-// @updateURL   https://github.com/jasonzliang/gists/raw/refs/heads/master/userscripts/infinite_scroll.user.js
+// @downloadURL https://github.com/jasonzliang/gists/raw/refs/heads/master/userscript/infinite_scroll.user.js
+// @updateURL   https://github.com/jasonzliang/gists/raw/refs/heads/master/userscript/infinite_scroll.user.js
 // ==/UserScript==
 
 (function () {

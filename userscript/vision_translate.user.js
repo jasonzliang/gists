@@ -53,8 +53,8 @@
 // @connect      translation.googleapis.com
 // @connect      *
 // @license      MPLv2
-// @downloadURL  https://github.com/jasonzliang/gists/raw/refs/heads/master/userscripts/vision_translate.user.js
-// @updateURL    https://github.com/jasonzliang/gists/raw/refs/heads/master/userscripts/vision_translate.user.js
+// @downloadURL  https://github.com/jasonzliang/gists/raw/refs/heads/master/userscript/vision_translate.user.js
+// @updateURL    https://github.com/jasonzliang/gists/raw/refs/heads/master/userscript/vision_translate.user.js
 // ==/UserScript==
 
 (function() {
