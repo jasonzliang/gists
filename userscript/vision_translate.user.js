@@ -699,8 +699,8 @@
             const result = await detector.translateWithSmartDetection(fullText, config.targetLang);
             createTranslationDisplay(img, result);
 
-            const langInfo = result.detectedLanguage ? ` (${getLanguageName(result.detectedLanguage)})` : '';
-            showToast(`Translation complete!${langInfo}`);
+            // const langInfo = result.detectedLanguage ? ` (${getLanguageName(result.detectedLanguage)})` : '';
+            showToast(`Translation complete!`);
 
         } catch (error) {
             console.error('Translation error:', error);
