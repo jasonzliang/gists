@@ -7,7 +7,6 @@
 // @icon         https://i.pinimg.com/736x/52/7f/ef/527fef673463dde3d1be2250b7120864.jpg
 // @downloadURL  https://github.com/jasonzliang/gists/raw/refs/heads/master/userscripts/manga_viewer.user.js
 // @updateURL    https://github.com/jasonzliang/gists/raw/refs/heads/master/userscripts/manga_viewer.user.js
-// @run-at       document-start
 // @noframes
 // @grant        GM_getValue
 // @grant        GM_setValue
