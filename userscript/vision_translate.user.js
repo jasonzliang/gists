@@ -1,15 +1,26 @@
 // ==UserScript==
 // @name         Google Image Translator
-// @namespace    https://github.com/yourusername
 // @version      2.1.0
 // @description  Translate text in images using Google Cloud Vision and Translation APIs
-// @icon         https://www.svgrepo.com/show/375395/cloud-vision-api.svg
 // @author       Anon
+// @namespace    https://github.com/yourusername
+// @license      MPLv2
+// @icon         https://www.svgrepo.com/show/375395/cloud-vision-api.svg
 // @noframes
-// -- NSFW START
+// @grant        GM_setValue
+// @grant        GM_getValue
+// @grant        GM_xmlhttpRequest
+// @grant        GM_registerMenuCommand
+// @connect      vision.googleapis.com
+// @connect      translation.googleapis.com
+// @connect      *
+// @downloadURL  https://github.com/jasonzliang/gists/raw/refs/heads/master/userscript/vision_translate.user.js
+// @updateURL    https://github.com/jasonzliang/gists/raw/refs/heads/master/userscript/vision_translate.user.js
+// -- GENERAL MANGA/COMIC SITES --
 // @match *://dynasty-scans.com/chapters/*
-// @match *://hentaifr.net/*
 // @match *://prismblush.com/comic/*
+// -- HENTAI/ADULT SITES --
+// @match *://hentaifr.net/*
 // @match *://www.hentairules.net/galleries*/picture.php*
 // @match *://pururin.us/read/*
 // @match *://hitomi.la/reader/*
@@ -34,8 +45,7 @@
 // @match *://*.hentaifox.com/g/*
 // @match *://*.hentai2read.com/*/*/*
 // @match *://*.hentai.ms/manga/*/*
-// -- NSFW END
-// -- FOOLSLIDE NSFW START
+// -- FOOLSLIDE-BASED READERS --
 // @match *://reader.yuriproject.net/read/*
 // @match *://ecchi.japanzai.com/read/*
 // @match *://h.japanzai.com/read/*
@@ -44,17 +54,6 @@
 // @match *://raws.yomanga.co/read/*
 // @match *://hentai.cafe/manga/read/*
 // @match *://*.yuri-ism.net/slide/read/*
-// -- FOOLSLIDE NSFW END
-// @grant        GM_setValue
-// @grant        GM_getValue
-// @grant        GM_xmlhttpRequest
-// @grant        GM_registerMenuCommand
-// @connect      vision.googleapis.com
-// @connect      translation.googleapis.com
-// @connect      *
-// @license      MPLv2
-// @downloadURL  https://github.com/jasonzliang/gists/raw/refs/heads/master/userscript/vision_translate.user.js
-// @updateURL    https://github.com/jasonzliang/gists/raw/refs/heads/master/userscript/vision_translate.user.js
 // ==/UserScript==
 
 (function() {

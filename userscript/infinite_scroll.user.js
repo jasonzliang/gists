@@ -2,24 +2,24 @@
 // @name        Unlock Hath Perks
 // @name:zh-TW  解鎖 Hath Perks
 // @name:zh-CN  解锁 Hath Perks
+// @version     2.4.5
+// @author      FlandreDaisuki, Anon
+// @namespace   https://flandre.in/github
+// @license     MPLv2
 // @description Unlock Hath Perks and add other helpers
 // @description:zh-TW 解鎖 Hath Perks 及增加一些小工具
 // @description:zh-CN 解锁 Hath Perks 及增加一些小工具
-// @namespace   https://flandre.in/github
-// @version     2.4.5
 // @match       https://e-hentai.org/*
 // @match       https://exhentai.org/*
 // @require     https://unpkg.com/vue@2.6.9/dist/vue.min.js
-// @icon        https://i.imgur.com/JsU0vTd.png
 // @grant       GM_getValue
 // @grant       GM.getValue
 // @grant       GM_setValue
 // @grant       GM.setValue
+// @icon        https://i.imgur.com/JsU0vTd.png
 // @noframes
-// @author      FlandreDaisuki, Anon
 // @supportURL  https://github.com/FlandreDaisuki/My-Browser-Extensions/issues
 // @homepageURL https://github.com/FlandreDaisuki/My-Browser-Extensions/blob/master/userscripts/UnlockHathPerks/README.md
-// @license     MPLv2
 // @downloadURL https://github.com/jasonzliang/gists/raw/refs/heads/master/userscript/infinite_scroll.user.js
 // @updateURL   https://github.com/jasonzliang/gists/raw/refs/heads/master/userscript/infinite_scroll.user.js
 // ==/UserScript==
