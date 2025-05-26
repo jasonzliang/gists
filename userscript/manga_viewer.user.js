@@ -1,64 +1,65 @@
 // ==UserScript==
-// @name Manga Loader NSFW + Download
-// @version 1.5.4
-// @description This is an unofficial fork of https://greasyfork.org/fr/scripts/12657-manga-loader-nsfw all credits goes to the original author, This script add a button to download the chapter
-// @author viatana35, Anon
-// @icon https://i.pinimg.com/736x/52/7f/ef/527fef673463dde3d1be2250b7120864.jpg
+// @name         Manga Loader NSFW + Download
+// @namespace    https://greasyfork.org/users/1007048
+// @version      1.5.4
+// @description  This is an unofficial fork of https://greasyfork.org/fr/scripts/12657-manga-loader-nsfw all credits goes to the original author, This script add a button to download the chapter
+// @author       viatana35, Anon
+// @icon         https://i.pinimg.com/736x/52/7f/ef/527fef673463dde3d1be2250b7120864.jpg
+// @downloadURL  https://github.com/jasonzliang/gists/raw/refs/heads/master/userscripts/manga_viewer.user.js
+// @updateURL    https://github.com/jasonzliang/gists/raw/refs/heads/master/userscripts/manga_viewer.user.js
+// @run-at       document-start
 // @noframes
-// @grant GM_getValue
-// @grant GM_setValue
-// @grant GM_deleteValue
-// @grant GM_xmlhttpRequest
-// @connect *.hath.network
-// @connect hath.network
-// -- NSFW START
-// @match *://dynasty-scans.com/chapters/*
-// @match *://hentaifr.net/*
-// @match *://prismblush.com/comic/*
-// @match *://www.hentairules.net/galleries*/picture.php*
-// @match *://pururin.us/read/*
-// @match *://hitomi.la/reader/*
-// @match *://*.doujins.com/*
-// @match *://www.8muses.com/comix/picture/*/*/*/*
-// @match *://nowshelf.com/watch/*
-// @match *://nhentai.net/g/*/*
-// @match *://e-hentai.org/s/*/*
-// @match *://exhentai.org/s/*/*
-// @match *://www.fakku.net/*/*/read*
-// @match *://hentaihere.com/m/*/*/*
-// @match *://www.hentaihere.com/m/*/*/*
-// @match *://*.tsumino.com/Read/View/*
-// @match *://www.hentaibox.net/*/*
-// @match *://*.hentai-free.org/*
-// @match *://*.mangafap.com/image/*
-// @match *://*.hentai4manga.com/hentai_manga/*
-// @match *://*.heymanga.me/manga/*
-// @match *://*.simply-hentai.com/*/page/*
-// @match *://*.gameofscanlation.moe/projects/*/*
-// @match *://*.luscious.net/c/*/pictures/album/*/id/*
-// @match *://*.hentaifox.com/g/*
-// @match *://*.hentai2read.com/*/*/*
-// @match *://*.hentai.ms/manga/*/*
-// -- NSFW END
+// @grant        GM_getValue
+// @grant        GM_setValue
+// @grant        GM_deleteValue
+// @grant        GM_xmlhttpRequest
+// @connect      *.hath.network
+// @connect      hath.network
+// -- NSFW SITES START
+// @match        *://dynasty-scans.com/chapters/*
+// @match        *://hentaifr.net/*
+// @match        *://prismblush.com/comic/*
+// @match        *://www.hentairules.net/galleries*/picture.php*
+// @match        *://pururin.us/read/*
+// @match        *://hitomi.la/reader/*
+// @match        *://*.doujins.com/*
+// @match        *://www.8muses.com/comix/picture/*/*/*/*
+// @match        *://nowshelf.com/watch/*
+// @match        *://nhentai.net/g/*/*
+// @match        *://e-hentai.org/s/*/*
+// @match        *://exhentai.org/s/*/*
+// @match        *://www.fakku.net/*/*/read*
+// @match        *://hentaihere.com/m/*/*/*
+// @match        *://www.hentaihere.com/m/*/*/*
+// @match        *://*.tsumino.com/Read/View/*
+// @match        *://www.hentaibox.net/*/*
+// @match        *://*.hentai-free.org/*
+// @match        *://*.mangafap.com/image/*
+// @match        *://*.hentai4manga.com/hentai_manga/*
+// @match        *://*.heymanga.me/manga/*
+// @match        *://*.simply-hentai.com/*/page/*
+// @match        *://*.gameofscanlation.moe/projects/*/*
+// @match        *://*.luscious.net/c/*/pictures/album/*/id/*
+// @match        *://*.hentaifox.com/g/*
+// @match        *://*.hentai2read.com/*/*/*
+// @match        *://*.hentai.ms/manga/*/*
+// -- NSFW SITES END
 // -- FOOLSLIDE NSFW START
-// @match *://reader.yuriproject.net/read/*
-// @match *://ecchi.japanzai.com/read/*
-// @match *://h.japanzai.com/read/*
-// @match *://reader.japanzai.com/read/*
-// @match *://yomanga.co/reader/read/*
-// @match *://raws.yomanga.co/read/*
-// @match *://hentai.cafe/manga/read/*
-// @match *://*.yuri-ism.net/slide/read/*
+// @match        *://reader.yuriproject.net/read/*
+// @match        *://ecchi.japanzai.com/read/*
+// @match        *://h.japanzai.com/read/*
+// @match        *://reader.japanzai.com/read/*
+// @match        *://yomanga.co/reader/read/*
+// @match        *://raws.yomanga.co/read/*
+// @match        *://hentai.cafe/manga/read/*
+// @match        *://*.yuri-ism.net/slide/read/*
 // -- FOOLSLIDE NSFW END
-// @require https://greasyfork.org/scripts/692-manga-loader/code/Manga%20Loader.user.js?29
-// @namespace https://greasyfork.org/users/1007048
 // *** Fix for jszip bug ***
-// @require data:application/javascript,%3BglobalThis.setImmediate%3DsetTimeout%3B
+// @require      data:application/javascript,%3BglobalThis.setImmediate%3DsetTimeout%3B
 // *************************
-// @require https://cdnjs.cloudflare.com/ajax/libs/jszip/3.9.1/jszip.min.js
-// @require https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js
-// @downloadURL https://github.com/jasonzliang/gists/raw/refs/heads/master/userscripts/manga_viewer.user.js
-// @updateURL https://github.com/jasonzliang/gists/raw/refs/heads/master/userscripts/manga_viewer.user.js
+// @require      https://greasyfork.org/scripts/692-manga-loader/code/Manga%20Loader.user.js?29
+// @require      https://cdnjs.cloudflare.com/ajax/libs/jszip/3.9.1/jszip.min.js
+// @require      https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js
 // ==/UserScript==
 
 /**
