@@ -9,8 +9,6 @@
 // @match        https://outlook.live.com/*
 // @icon         data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzODQgNTEyIiBmaWxsPSIjMjhhOGVhIj48cGF0aCBkPSJNMzgxLjIgMTcyLjhDMzc3LjEgMTY0LjkgMzY4LjkgMTYwIDM2MCAxNjBoLTE1Ni42bDUwLjg0LTEyNy4xYzIuOTY5LTcuMzc1IDIuMDYyLTE1Ljc4LTIuNDA2LTIyLjM4UzIzOS4xIDAgMjMyIDBoLTE3NkM0My45NyAwIDMzLjgxIDguOTA2IDMyLjIyIDIwLjg0bC0zMiAyNDBDLS43MTc5IDI2Ny43IDEuMzc2IDI3NC42IDUuOTM4IDI3OS44QzEwLjUgMjg1IDE3LjA5IDI4OCAyNCAyODhoMTQ2LjNsLTQxLjc4IDE5NC4xYy0yLjQwNiAxMS4yMiAzLjQ2OSAyMi41NiAxNCAyNy4wOUMxNDUuNiA1MTEuNCAxNDguOCA1MTIgMTUyIDUxMmM3LjcxOSAwIDE1LjIyLTMuNzUgMTkuODEtMTAuNDRsMjA4LTMwNEMzODQuOCAxOTAuMiAzODUuNCAxODAuNyAzODEuMiAxNzIuOHoiLz48L3N2Zz4=
 // @grant        none
-// @downloadURL https://github.com/jasonzliang/gists/raw/refs/heads/master/userscript/keep_alive.user.js
-// @updateURL   https://github.com/jasonzliang/gists/raw/refs/heads/master/userscript/keep_alive.user.js
 // ==/UserScript==
 
 (function() {
@@ -43,9 +41,9 @@
             position: fixed;
             bottom: 0;
             left: 0;
-            background: #28a8ea;
-            color: white;
-            width: 32px;
+            background: transparent;
+            color: black;
+            width: 52px;
             height: 32px;
             font-size: 16px;
             z-index: 10000;
