@@ -69,113 +69,284 @@
         fontFamily: 'Arial, sans-serif',
         textColor: '#000000',
         minImageWidth: 100,
-        minImageHeight: 50
+        minImageHeight: 50,
+        useDbscan: true,
+        dbscanEps: 50,
+        dbscanMinPoints: 3
     };
 
     let config = { ...DEFAULT_CONFIG, ...GM_getValue('imageTranslatorConfig', {}) };
-    const buttonMap = new WeakMap(); // Track buttons for cleanup
-    const overlayMap = new WeakMap(); // Track overlays for cleanup
+    const buttonMap = new WeakMap();
+    const overlayMap = new WeakMap();
+
+    // Text Detection and Clustering Class
+    class TextDetector {
+        constructor(apiKey, options = {}) {
+            this.apiKey = apiKey;
+            this.options = {
+                useDbscan: true,
+                dbscanEps: 50,
+                dbscanMinPoints: 3,
+                clusterSortTolerance: 20,
+                blockSortTolerance: 10,
+                ...options
+            };
+        }
+
+        detectText(imageBase64) {
+            return new Promise((resolve, reject) => {
+                if (!this.apiKey) {
+                    reject(new Error('Vision API key not configured'));
+                    return;
+                }
+
+                GM_xmlhttpRequest({
+                    method: 'POST',
+                    url: `https://vision.googleapis.com/v1/images:annotate?key=${this.apiKey}`,
+                    data: JSON.stringify({
+                        requests: [{
+                            image: { content: imageBase64 },
+                            features: [{ type: 'TEXT_DETECTION', maxResults: 50 }]
+                        }]
+                    }),
+                    headers: { 'Content-Type': 'application/json' },
+                    onload: response => {
+                        try {
+                            const result = JSON.parse(response.responseText);
+                            if (result.error) {
+                                reject(new Error(`Vision API: ${result.error.message}`));
+                                return;
+                            }
+
+                            const annotations = result.responses?.[0]?.textAnnotations;
+                            if (!annotations?.length) {
+                                resolve({ fullText: '', textBlocks: [] });
+                                return;
+                            }
+
+                            // Extract original text and text blocks
+                            const originalText = annotations[0].description;
+                            const textBlocks = annotations.slice(1).map(a => ({
+                                text: a.description,
+                                boundingBox: a.boundingPoly,
+                                center: this.calculateCenter(a.boundingPoly)
+                            }));
+
+                            // Process text based on configuration
+                            let processedText = originalText; // Default to original
+                            let processingMethod = 'original';
+
+                            if (this.options.useDbscan) {
+                                try {
+                                    processedText = this.processWithDbscan(textBlocks);
+                                    processingMethod = 'dbscan';
+                                } catch (error) {
+                                    console.warn('[TextDetector] DBSCAN failed:', error);
+                                    console.log('[TextDetector] Using original text');
+                                    // processedText already set to originalText
+                                }
+                            } else {
+                                console.log('[TextDetector] DBSCAN disabled, using original text');
+                            }
+
+                            resolve({
+                                fullText: processedText,
+                                textBlocks: textBlocks,
+                                processingMethod: processingMethod
+                            });
+                        } catch (e) {
+                            reject(e);
+                        }
+                    },
+                    onerror: reject
+                });
+            });
+        }
+
+        processWithDbscan(textBlocks) {
+            const clusters = this.dbscanClustering(textBlocks, this.options.dbscanEps, this.options.dbscanMinPoints);
+
+            console.log(`[TextDetector] DBSCAN (eps=${this.options.dbscanEps}, minPts=${this.options.dbscanMinPoints}) detected ${clusters.length} clusters:`);
+            clusters.forEach((cluster, i) => {
+                console.log(`  Cluster ${i + 1} (${cluster.length} blocks):`,
+                    cluster.map(block => `"${block.text}"`).join(', '));
+            });
+
+            const sortedClusters = clusters
+                .filter(cluster => cluster.length > 0)
+                .sort((a, b) => {
+                    const avgA = this.getClusterCenter(a);
+                    const avgB = this.getClusterCenter(b);
+
+                    if (Math.abs(avgA.y - avgB.y) > this.options.clusterSortTolerance) {
+                        return avgA.y - avgB.y;
+                    }
+                    return avgA.x - avgB.x;
+                });
+
+            sortedClusters.forEach(cluster => {
+                cluster.sort((a, b) => {
+                    if (Math.abs(a.center.y - b.center.y) > this.options.blockSortTolerance) {
+                        return a.center.y - b.center.y;
+                    }
+                    return a.center.x - b.center.x;
+                });
+            });
+
+            const clusteredText = sortedClusters
+                .map(cluster => cluster.map(block => block.text).join(' '))
+                .join('\n');
+
+            console.log('[TextDetector] Final clustered text:', clusteredText);
+            return clusteredText;
+        }
+
+        calculateCenter(boundingPoly) {
+            const vertices = boundingPoly.vertices;
+            if (!vertices?.length) return { x: 0, y: 0 };
+
+            const sumX = vertices.reduce((sum, v) => sum + (v.x || 0), 0);
+            const sumY = vertices.reduce((sum, v) => sum + (v.y || 0), 0);
+
+            return { x: sumX / vertices.length, y: sumY / vertices.length };
+        }
+
+        getClusterCenter(cluster) {
+            const sumX = cluster.reduce((sum, block) => sum + block.center.x, 0);
+            const sumY = cluster.reduce((sum, block) => sum + block.center.y, 0);
+            return { x: sumX / cluster.length, y: sumY / cluster.length };
+        }
+
+        calculateDistance(point1, point2) {
+            const dx = point1.x - point2.x;
+            const dy = point1.y - point2.y;
+            return Math.sqrt(dx * dx + dy * dy);
+        }
+
+        dbscanClustering(textBlocks, epsilon, minPoints) {
+            const clusters = [];
+            const visited = new Set();
+            const clustered = new Set();
+
+            for (let i = 0; i < textBlocks.length; i++) {
+                if (visited.has(i)) continue;
+
+                visited.add(i);
+                const neighbors = this.getNeighbors(textBlocks, i, epsilon);
+
+                if (neighbors.length < minPoints) continue;
+
+                const cluster = [];
+                this.expandCluster(textBlocks, i, neighbors, cluster, clustered, visited, epsilon, minPoints);
+
+                if (cluster.length > 0) clusters.push(cluster);
+            }
+
+            // Add unclustered points as individual clusters
+            for (let i = 0; i < textBlocks.length; i++) {
+                if (!clustered.has(i)) {
+                    clusters.push([textBlocks[i]]);
+                }
+            }
+
+            return clusters;
+        }
+
+        getNeighbors(textBlocks, pointIndex, epsilon) {
+            const neighbors = [];
+            const currentPoint = textBlocks[pointIndex];
+
+            for (let i = 0; i < textBlocks.length; i++) {
+                if (i !== pointIndex && this.calculateDistance(currentPoint.center, textBlocks[i].center) <= epsilon) {
+                    neighbors.push(i);
+                }
+            }
+
+            return neighbors;
+        }
+
+        expandCluster(textBlocks, pointIndex, neighbors, cluster, clustered, visited, epsilon, minPoints) {
+            cluster.push(textBlocks[pointIndex]);
+            clustered.add(pointIndex);
+
+            for (let i = 0; i < neighbors.length; i++) {
+                const neighborIndex = neighbors[i];
+
+                if (!visited.has(neighborIndex)) {
+                    visited.add(neighborIndex);
+                    const neighborNeighbors = this.getNeighbors(textBlocks, neighborIndex, epsilon);
+
+                    if (neighborNeighbors.length >= minPoints) {
+                        neighbors.push(...neighborNeighbors.filter(n => !neighbors.includes(n) && n !== neighborIndex));
+                    }
+                }
+
+                if (!clustered.has(neighborIndex)) {
+                    cluster.push(textBlocks[neighborIndex]);
+                    clustered.add(neighborIndex);
+                }
+            }
+        }
+    }
 
     // Enhanced Language Detector
     class LanguageDetector {
         constructor() {
             this.cache = new Map();
-            this.stats = new Map(); // Track detection accuracy
+            this.stats = new Map();
             this.MIN_CONFIDENCE = 0.7;
             this.COMMON_FALLBACKS = ['ja', 'ko', 'zh-CN', 'zh-TW', 'es', 'fr', 'de'];
         }
 
-        // Pre-filter obviously non-translatable content
         isTranslatableText(text) {
             if (!text || text.trim().length < 2) return false;
-
-            // Skip if mostly numbers/symbols
             const alphaRatio = (text.match(/[a-zA-Z\u0080-\uFFFF]/g) || []).length / text.length;
             if (alphaRatio < 0.3) return false;
 
-            // Skip common non-translatable patterns
             const skipPatterns = [
-                /^[\d\s\-\+\(\)\.]+$/, // Phone numbers, dates
-                /^[A-Z]{2,}[\d\s]*$/, // License plates, codes
-                /^https?:\/\//, // URLs
-                /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/ // Emails
+                /^[\d\s\-\+\(\)\.]+$/,
+                /^[A-Z]{2,}[\d\s]*$/,
+                /^https?:\/\//,
+                /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/
             ];
 
             return !skipPatterns.some(pattern => pattern.test(text.trim()));
         }
 
-        // Get cached language detection
-        getCachedDetection(text) {
-            const key = this.generateCacheKey(text);
-            return this.cache.get(key);
-        }
-
-        // Cache detection result
-        cacheDetection(text, detection) {
-            const key = this.generateCacheKey(text);
-            this.cache.set(key, {
-                ...detection,
-                timestamp: Date.now()
-            });
-
-            // Clean old cache entries (keep last 100)
-            if (this.cache.size > 100) {
-                const oldestKey = this.cache.keys().next().value;
-                this.cache.delete(oldestKey);
-            }
-        }
-
-        generateCacheKey(text) {
-            // Use first 50 chars + length as cache key
-            return text.substring(0, 50) + ':' + text.length;
-        }
-
-        // Enhanced translation with smart auto-detect
         async translateWithSmartDetection(text, targetLang = 'en') {
             if (!this.isTranslatableText(text)) {
                 throw new Error('Text does not appear to be translatable');
             }
 
-            // Check cache first
             const cached = this.getCachedDetection(text);
-            if (cached && Date.now() - cached.timestamp < 300000) { // 5 min cache
+            if (cached && Date.now() - cached.timestamp < 300000) {
                 const result = await this.translateText(text, cached.language, targetLang);
                 return {
                     ...result,
                     detectedLanguage: cached.language,
                     confidence: cached.confidence,
-                    detectionMethod: cached.method || 'cached'
+                    detectionMethod: 'cached'
                 };
             }
 
             try {
-                // Try auto-detect first
                 const result = await this.translateText(text, 'auto', targetLang);
-
                 if (result.confidence && result.confidence >= this.MIN_CONFIDENCE) {
-                    // Cache successful detection
                     this.cacheDetection(text, {
                         language: result.detectedLanguage,
                         confidence: result.confidence,
                         method: 'auto'
                     });
-
-                    this.updateStats(result.detectedLanguage, true);
                     return result;
                 } else {
-                    console.warn(`Low confidence detection: ${result.confidence}`);
                     return this.tryFallbackLanguages(text, targetLang);
                 }
-
             } catch (error) {
-                console.warn('Auto-detect failed:', error.message);
                 return this.tryFallbackLanguages(text, targetLang);
             }
         }
 
-        // Try common languages as fallback
         async tryFallbackLanguages(text, targetLang) {
-            // Order fallbacks by previous success rate
             const orderedFallbacks = this.COMMON_FALLBACKS.sort((a, b) => {
                 const aSuccess = this.stats.get(a)?.successRate || 0;
                 const bSuccess = this.stats.get(b)?.successRate || 0;
@@ -185,20 +356,14 @@
             for (const sourceLang of orderedFallbacks) {
                 try {
                     const result = await this.translateText(text, sourceLang, targetLang);
-
-                    // Simple heuristic: if translation is very different from original,
-                    // it's probably correct
                     const similarity = this.calculateSimilarity(text, result.translatedText);
-                    if (similarity < 0.8) { // Less than 80% similar = good translation
-                        this.updateStats(sourceLang, true);
 
-                        // Cache this successful fallback
+                    if (similarity < 0.8) {
                         this.cacheDetection(text, {
                             language: sourceLang,
-                            confidence: 0.6, // Lower confidence for fallback
+                            confidence: 0.6,
                             method: 'fallback'
                         });
-
                         return {
                             ...result,
                             detectedLanguage: sourceLang,
@@ -206,7 +371,6 @@
                         };
                     }
                 } catch (e) {
-                    this.updateStats(sourceLang, false);
                     continue;
                 }
             }
@@ -214,35 +378,28 @@
             throw new Error('Could not detect language with any method');
         }
 
-        // Update success statistics for languages
-        updateStats(language, success) {
-            if (!this.stats.has(language)) {
-                this.stats.set(language, { attempts: 0, successes: 0, successRate: 0 });
-            }
-
-            const stats = this.stats.get(language);
-            stats.attempts++;
-            if (success) stats.successes++;
-            stats.successRate = stats.successes / stats.attempts;
+        getCachedDetection(text) {
+            const key = text.substring(0, 50) + ':' + text.length;
+            return this.cache.get(key);
         }
 
-        // Simple text similarity calculation
+        cacheDetection(text, detection) {
+            const key = text.substring(0, 50) + ':' + text.length;
+            this.cache.set(key, { ...detection, timestamp: Date.now() });
+
+            if (this.cache.size > 100) {
+                const oldestKey = this.cache.keys().next().value;
+                this.cache.delete(oldestKey);
+            }
+        }
+
         calculateSimilarity(text1, text2) {
-            const len1 = text1.length;
-            const len2 = text2.length;
-            const maxLen = Math.max(len1, len2);
-
-            if (maxLen === 0) return 1;
-
-            // Simple character overlap measure
             const set1 = new Set(text1.toLowerCase().split(''));
             const set2 = new Set(text2.toLowerCase().split(''));
             const intersection = new Set([...set1].filter(x => set2.has(x)));
-
             return intersection.size / Math.max(set1.size, set2.size);
         }
 
-        // Enhanced translate function with better error handling
         async translateText(text, sourceLang, targetLang) {
             return new Promise((resolve, reject) => {
                 if (!config.translateApiKey) {
@@ -250,27 +407,18 @@
                     return;
                 }
 
-                const body = {
-                    q: text,
-                    target: targetLang,
-                    format: 'text'
-                };
-
-                // Add source language if not auto
-                if (sourceLang !== 'auto') {
-                    body.source = sourceLang;
-                }
+                const body = { q: text, target: targetLang, format: 'text' };
+                if (sourceLang !== 'auto') body.source = sourceLang;
 
                 GM_xmlhttpRequest({
                     method: 'POST',
                     url: `https://translation.googleapis.com/language/translate/v2?key=${config.translateApiKey}`,
                     data: JSON.stringify(body),
                     headers: { 'Content-Type': 'application/json' },
-                    timeout: 10000, // 10 second timeout
+                    timeout: 10000,
                     onload: response => {
                         try {
                             const result = JSON.parse(response.responseText);
-
                             if (result.error) {
                                 reject(new Error(`Translation API: ${result.error.message}`));
                                 return;
@@ -285,10 +433,9 @@
                             resolve({
                                 translatedText: translation.translatedText,
                                 detectedLanguage: translation.detectedSourceLanguage,
-                                confidence: translation.confidence || 1.0, // Default high confidence if not provided
+                                confidence: translation.confidence || 1.0,
                                 originalText: text
                             });
-
                         } catch (e) {
                             reject(new Error(`Failed to parse translation response: ${e.message}`));
                         }
@@ -297,17 +444,6 @@
                     ontimeout: () => reject(new Error('Translation request timed out'))
                 });
             });
-        }
-
-        // Get detection statistics for debugging
-        getStats() {
-            return Object.fromEntries(this.stats);
-        }
-
-        // Clear cache and stats
-        reset() {
-            this.cache.clear();
-            this.stats.clear();
         }
     }
 
@@ -381,7 +517,6 @@
             const margin = 5;
             const btnSize = 20;
 
-            // Position at bottom-left corner
             button.style.top = `${window.scrollY + rect.bottom - btnSize - margin}px`;
             button.style.left = `${window.scrollX + rect.left + margin}px`;
         } catch (err) {
@@ -417,16 +552,13 @@
         document.body.appendChild(button);
         buttonMap.set(img, button);
 
-        // Position button
         updateButtonPosition(img, button);
 
-        // Event handlers
         button.onclick = e => {
             e.stopPropagation();
             translateImage(img);
         };
 
-        // Show/hide on hover
         const showButton = () => {
             button.style.display = 'flex';
             updateButtonPosition(img, button);
@@ -442,7 +574,6 @@
         img.addEventListener('mouseleave', hideButton);
         button.addEventListener('mouseleave', hideButton);
 
-        // Cleanup observer
         const observer = new MutationObserver(mutations => {
             mutations.forEach(mutation => {
                 if (mutation.type === 'childList' &&
@@ -525,52 +656,15 @@
         });
     }
 
-    // API calls
+    // Legacy detectText function for backward compatibility
     function detectText(imageBase64) {
-        return new Promise((resolve, reject) => {
-            if (!config.visionApiKey) {
-                reject(new Error('Vision API key not configured'));
-                return;
-            }
-
-            GM_xmlhttpRequest({
-                method: 'POST',
-                url: `https://vision.googleapis.com/v1/images:annotate?key=${config.visionApiKey}`,
-                data: JSON.stringify({
-                    requests: [{
-                        image: { content: imageBase64 },
-                        features: [{ type: 'TEXT_DETECTION', maxResults: 50 }]
-                    }]
-                }),
-                headers: { 'Content-Type': 'application/json' },
-                onload: response => {
-                    try {
-                        const result = JSON.parse(response.responseText);
-                        if (result.error) {
-                            reject(new Error(`Vision API: ${result.error.message}`));
-                            return;
-                        }
-
-                        const annotations = result.responses?.[0]?.textAnnotations;
-                        if (!annotations?.length) {
-                            resolve({ fullText: '', textBlocks: [] });
-                            return;
-                        }
-
-                        resolve({
-                            fullText: annotations[0].description,
-                            textBlocks: annotations.slice(1).map(a => ({
-                                text: a.description,
-                                boundingBox: a.boundingPoly
-                            }))
-                        });
-                    } catch (e) {
-                        reject(e);
-                    }
-                },
-                onerror: reject
-            });
+        const textDetector = new TextDetector(config.visionApiKey, {
+            useDbscan: config.useDbscan !== false,
+            dbscanEps: config.dbscanEps || 50,
+            dbscanMinPoints: config.dbscanMinPoints || 3
         });
+
+        return textDetector.detectText(imageBase64);
     }
 
     // Legacy translateText function for backward compatibility
@@ -590,18 +684,15 @@
 
     // Translation display
     function createTranslationDisplay(img, result) {
-        // Handle both enhanced result object and legacy string
         let translatedText, originalText, detectedLanguage, confidence, detectionMethod;
 
         if (typeof result === 'string') {
-            // Legacy mode - just translated text
             translatedText = result;
             originalText = img.originalText || 'Original text not available';
             detectedLanguage = null;
             confidence = null;
             detectionMethod = null;
         } else {
-            // Enhanced mode - full result object
             translatedText = result.translatedText;
             originalText = result.originalText;
             detectedLanguage = result.detectedLanguage;
@@ -609,7 +700,6 @@
             detectionMethod = result.detectionMethod;
         }
 
-        // Remove existing overlay
         const existing = overlayMap.get(img);
         if (existing) existing.remove();
 
@@ -617,7 +707,6 @@
         overlay.className = 'img-translator-overlay';
         overlay.style.width = `${img.width}px`;
 
-        // Language detection info
         let detectionInfo = '';
         if (detectedLanguage) {
             const langName = getLanguageName(detectedLanguage);
@@ -645,7 +734,6 @@
             <button style="position:absolute;top:8px;right:8px;background:none;border:none;font-size:18px;cursor:pointer;color:#666;">×</button>
         `;
 
-        // Add confidence warning for low-confidence detections
         if (confidence && confidence < 0.8) {
             const warning = document.createElement('div');
             warning.style.cssText = 'padding:5px 10px;background:#fff3cd;border-top:1px solid #ffeaa7;font-size:11px;color:#856404;';
@@ -653,17 +741,14 @@
             overlay.appendChild(warning);
         }
 
-        // Close button
         overlay.querySelector('button').onclick = () => {
             overlay.remove();
             overlayMap.delete(img);
         };
 
-        // Insert after image
         img.parentNode.insertBefore(overlay, img.nextSibling);
         overlayMap.set(img, overlay);
 
-        // Scroll into view
         setTimeout(() => overlay.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 100);
     }
 
@@ -692,14 +777,11 @@
 
             loading.textContent = 'Translating...';
 
-            // Store original text on image for legacy compatibility
             img.originalText = fullText;
 
-            // Use enhanced translation with smart detection
             const result = await detector.translateWithSmartDetection(fullText, config.targetLang);
             createTranslationDisplay(img, result);
 
-            // const langInfo = result.detectedLanguage ? ` (${getLanguageName(result.detectedLanguage)})` : '';
             showToast(`Translation complete!`);
 
         } catch (error) {
@@ -726,6 +808,15 @@
             <select id="sourceLang">${getLanguageOptions(config.sourceLang, true)}</select>
             <label>Target Language</label>
             <select id="targetLang">${getLanguageOptions(config.targetLang)}</select>
+            <h3>Text Clustering</h3>
+            <label>
+                <input type="checkbox" id="useDbscan" ${config.useDbscan !== false ? 'checked' : ''}>
+                Enable DBSCAN text clustering
+            </label>
+            <label>Epsilon Distance (pixels)</label>
+            <input type="number" id="dbscanEps" min="10" max="200" value="${config.dbscanEps || 50}">
+            <label>Minimum Points</label>
+            <input type="number" id="dbscanMinPoints" min="1" max="10" value="${config.dbscanMinPoints || 3}">
             <h3>Appearance</h3>
             <label>Font Size (px)</label>
             <input type="number" id="fontSize" min="8" max="36" value="${config.fontSize}">
@@ -758,14 +849,16 @@
                 fontFamily: $('#fontFamily').value,
                 textColor: $('#textColor').value,
                 minImageWidth: parseInt($('#minImageWidth').value),
-                minImageHeight: parseInt($('#minImageHeight').value)
+                minImageHeight: parseInt($('#minImageHeight').value),
+                useDbscan: $('#useDbscan').checked,
+                dbscanEps: parseInt($('#dbscanEps').value),
+                dbscanMinPoints: parseInt($('#dbscanMinPoints').value)
             };
 
             GM_setValue('imageTranslatorConfig', config);
             panel.remove();
             showToast('Settings saved');
 
-            // Refresh
             removeAllOverlays();
             removeAllButtons();
             setTimeout(addTranslateButtons, 500);
@@ -776,7 +869,7 @@
     }
 
     function translateAllImages() {
-        const images = Array.from($$('img')).filter(isEligibleImage);
+        const images = Array.from($('img')).filter(isEligibleImage);
         if (!images.length) {
             showToast('No suitable images found');
             return;
@@ -809,19 +902,15 @@
     function init() {
         addStyles();
 
-        // Register menu commands
         GM_registerMenuCommand('Settings', showSettingsPanel);
         GM_registerMenuCommand('Translate All Images', translateAllImages);
         GM_registerMenuCommand('Remove All Translations', removeAllOverlays);
 
-        // Add buttons - always enabled now
         setTimeout(addTranslateButtons, 1000);
 
-        // Event listeners
         window.addEventListener('resize', updateAllButtonPositions);
         window.addEventListener('scroll', updateAllButtonPositions);
 
-        // Setup observer
         setupObserver();
     }
 
