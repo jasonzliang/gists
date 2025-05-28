@@ -100,16 +100,16 @@
 
                 // Horizontal text tolerances as ratios of image dimensions (increased for better clustering)
                 horizontal: {
-                    clusterToleranceXRatio: 0.02,
-                    clusterToleranceYRatio: 0.02,
+                    clusterToleranceXRatio: 0.1,
+                    clusterToleranceYRatio: 0.1,
                     blockToleranceXRatio: 0.01,
                     blockToleranceYRatio: 0.01
                 },
 
                 // Vertical text tolerances as ratios of image dimensions (increased for better clustering)
                 vertical: {
-                    clusterToleranceXRatio: 0.02,
-                    clusterToleranceYRatio: 0.02,
+                    clusterToleranceXRatio: 0.1,
+                    clusterToleranceYRatio: 0.2,
                     blockToleranceXRatio: 0.01,
                     blockToleranceYRatio: 0.01
                 },
@@ -395,7 +395,7 @@
                     const centerB = this.getClusterCenter(b);
 
                     if (tolerances.direction === 'vertical') {
-                        // Vertical: sort by X first (right to left for manga), then Y
+                        // Vertical: sort by Y first (right to left for manga), then X
                         if (Math.abs(centerA.y - centerB.y) > tolerances.clusterToleranceY) {
                             return centerA.y - centerB.y; // Top to bottom within same column
                         }
