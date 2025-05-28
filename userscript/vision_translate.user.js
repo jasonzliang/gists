@@ -90,9 +90,9 @@
 
                 // Direction detection (optimized values)
                 textDirection: 'auto',
-                minAspectRatio: 1.15,       // Optimized from 1.2
-                verticalThreshold: 0.45,    // Optimized from 0.3
-                strongVerticalThreshold: 0.7,
+                minAspectRatio: 1.2,
+                verticalThreshold: 0.3,
+                strongVerticalThreshold: 0.6,
                 minBlockSize: 8,
 
                 // Image size-based tolerance ratios (always enabled)
@@ -100,18 +100,18 @@
 
                 // Horizontal text tolerances as ratios of image dimensions (increased for better clustering)
                 horizontal: {
-                    clusterToleranceXRatio: 0.1,
-                    clusterToleranceYRatio: 0.1,
-                    blockToleranceXRatio: 0.01,
-                    blockToleranceYRatio: 0.01
+                    clusterToleranceXRatio: 0.05,
+                    clusterToleranceYRatio: 0.2,
+                    blockToleranceXRatio: 0.02,
+                    blockToleranceYRatio: 0.02
                 },
 
                 // Vertical text tolerances as ratios of image dimensions (increased for better clustering)
                 vertical: {
-                    clusterToleranceXRatio: 0.1,
+                    clusterToleranceXRatio: 0.05,
                     clusterToleranceYRatio: 0.2,
-                    blockToleranceXRatio: 0.01,
-                    blockToleranceYRatio: 0.01
+                    blockToleranceXRatio: 0.02,
+                    blockToleranceYRatio: 0.02
                 },
 
                 ...options
