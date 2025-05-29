@@ -99,5 +99,5 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Site ID for sitemap
 SITE_ID = 1
-SITE_DOMAIN = 'ganymede.tailc7e71d.ts.net'
+SITE_DOMAIN = 'rome-ai.space'
 SITE_NAME = 'Rome-AI'
