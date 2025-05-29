@@ -1,23 +1,20 @@
+from django.conf import settings
+from django.contrib import messages
+from django.contrib.sites.models import Site
 from django.http import HttpResponse
 from django.shortcuts import render, get_object_or_404, redirect
-from django.views.generic import ListView, DetailView, TemplateView, FormView
+from django.utils import timezone
 from django.views import View
 from django.views.decorators.http import require_http_methods
-from django.urls import reverse_lazy
-from django.contrib import messages
-from .models import BlogPost, Team, Project, Event, Category
-from django.utils import timezone
+from django.views.generic import ListView, DetailView, TemplateView, FormView
+
 from .forms import ContactForm
-from django.conf import settings
-from django.contrib.sites.models import Site
+from .models import BlogPost, Team, Project, Event, Category
 
 @require_http_methods(["GET"])
 def robots_txt(request):
-    try:
-        site = Site.objects.get(pk=settings.SITE_ID)
-        domain = site.domain
-    except Site.DoesNotExist:
-        domain = 'rome-ai.space'  # fallback
+    site = Site.objects.get(pk=settings.SITE_ID)
+    domain = site.domain
 
     lines = [
         "User-agent: *",
