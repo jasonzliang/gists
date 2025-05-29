@@ -23,6 +23,7 @@ INSTALLED_APPS = [
     'django.contrib.sitemaps',
     'django.contrib.sites',
     'rome_ai_app.apps.RomeAiAppConfig',
+    'robots'
 ]
 
 MIDDLEWARE = [
