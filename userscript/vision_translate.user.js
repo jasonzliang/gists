@@ -45,6 +45,7 @@
 // @match *://*.hentaifox.com/g/*
 // @match *://*.hentai2read.com/*/*/*
 // @match *://*.hentai.ms/manga/*/*
+// @match *://kemono.su/*
 // -- FOOLSLIDE-BASED READERS --
 // @match *://reader.yuriproject.net/read/*
 // @match *://ecchi.japanzai.com/read/*
