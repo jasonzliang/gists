@@ -1,0 +1,46 @@
+# Core scientific computing
+numpy
+torch
+torchvision
+transformers
+
+# Computer vision and image processing
+opencv-python
+pillow
+pillow-avif
+pillow-heif
+
+# Web framework and UI
+streamlit
+streamlit-folium
+django
+
+# Audio processing
+mutagen
+yt-dlp
+
+# OCR and text processing
+paddleocr
+
+# Geospatial and mapping
+geoclip
+geopy
+folium
+
+# System and hardware monitoring
+psutil
+gputil
+
+# Google Cloud services
+google-cloud-translate
+
+# Specialized ML/AI libraries
+vec2text
+fastchat
+
+# Utility libraries
+packaging
+piptools
+
+# OpenAI API
+openai
