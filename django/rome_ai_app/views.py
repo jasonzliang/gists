@@ -13,7 +13,11 @@ from django.contrib.sites.models import Site
 
 @require_http_methods(["GET"])
 def robots_txt(request):
-    current_site = Site.objects.get_current()
+    try:
+        site = Site.objects.get(pk=settings.SITE_ID)
+        domain = site.domain
+    except Site.DoesNotExist:
+        domain = 'rome-ai.space'  # fallback
 
     lines = [
         "User-agent: *",
@@ -21,8 +25,9 @@ def robots_txt(request):
         "",
         "Disallow: /admin/",
         "",
-        f"Sitemap: https://{current_site.domain}/sitemap.xml",
+        f"Sitemap: https://{domain}/sitemap.xml",
     ]
+
     return HttpResponse("\n".join(lines), content_type="text/plain")
 
 class IndexView(TemplateView):
