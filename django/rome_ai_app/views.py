@@ -1,11 +1,29 @@
+from django.http import HttpResponse
 from django.shortcuts import render, get_object_or_404, redirect
 from django.views.generic import ListView, DetailView, TemplateView, FormView
 from django.views import View
+from django.views.decorators.http import require_http_methods
 from django.urls import reverse_lazy
 from django.contrib import messages
 from .models import BlogPost, Team, Project, Event, Category
 from django.utils import timezone
 from .forms import ContactForm
+from django.conf import settings
+from django.contrib.sites.models import Site
+
+@require_http_methods(["GET"])
+def robots_txt(request):
+    current_site = Site.objects.get_current()
+
+    lines = [
+        "User-agent: *",
+        "Allow: /",
+        "",
+        "Disallow: /admin/",
+        "",
+        f"Sitemap: https://{current_site.domain}/sitemap.xml",
+    ]
+    return HttpResponse("\n".join(lines), content_type="text/plain")
 
 class IndexView(TemplateView):
     template_name = 'rome_ai_app/index.html'
