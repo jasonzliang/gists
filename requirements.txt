@@ -7,7 +7,7 @@ transformers
 # Computer vision and image processing
 opencv-python
 pillow
-pillow-avif
+pillow-avif-plugin
 pillow-heif
 
 # Web framework and UI
