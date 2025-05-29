@@ -3,7 +3,7 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib.sitemaps.views import sitemap
-from django.views.generic import TemplateView
+from rome_ai_app.views import robots_txt  # ADD THIS LINE
 from rome_ai_app.sitemaps import (
     StaticViewSitemap,
     BlogSitemap,
@@ -23,7 +23,7 @@ urlpatterns = [
     path('', include('rome_ai_app.urls')),
     path('sitemap.xml', sitemap, {'sitemaps': sitemaps},
          name='django.contrib.sitemaps.views.sitemap'),
-    path('robots.txt', robots_txt, name='robots_txt'),
+    path('robots.txt', robots_txt, name='robots_txt'),  # Now this will work
 ]
 
 if settings.DEBUG:
