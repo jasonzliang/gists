@@ -75,8 +75,19 @@ check_tailscale_exit_node() {
     EXITNODE_STATUS=$(echo "$TAILSCALE_STATUS" | jsonfilter -e '$.Self.ExitNodeOption')
     if [ "$EXITNODE_STATUS" != "true" ]; then
         logger -t tailscale_exitnode "Exit node is disabled, enabling it now"
-        tailscale up --advertise-exit-node --accept-dns=true --accept-routes --advertise-routes=0.0.0.0/0,::/0,192.168.0.0/16
-        logger -t tailscale_exitnode "Exit node has been enabled"
+
+        # Read custom routes if they exist
+        CUSTOM_ROUTES_FILE="/etc/tailscale-custom-routes"
+        if [ -f "$CUSTOM_ROUTES_FILE" ]; then
+            ADVERTISE_ROUTES=$(cat "$CUSTOM_ROUTES_FILE")
+            logger -t tailscale_exitnode "Using custom routes: $ADVERTISE_ROUTES"
+        else
+            ADVERTISE_ROUTES="0.0.0.0/0,::/0"
+            logger -t tailscale_exitnode "Using default routes: $ADVERTISE_ROUTES"
+        fi
+
+        tailscale up --advertise-exit-node --accept-dns=true --accept-routes --advertise-routes="$ADVERTISE_ROUTES"
+        logger -t tailscale_exitnode "Exit node has been enabled with routes: $ADVERTISE_ROUTES"
     else
         logger -t tailscale_exitnode "Exit node is already enabled"
     fi
@@ -84,7 +95,44 @@ check_tailscale_exit_node() {
     return 0
 }
 
-# Function to check and enable cron service
+# Function to configure custom routes
+configure_routes() {
+    echo ""
+    echo "=== Tailscale Route Configuration ==="
+    echo "Default routes: 0.0.0.0/0,::/0 (all internet traffic)"
+    echo ""
+    echo "Do you want to advertise additional subnet routes? (y/N)"
+    printf "Choice: "
+    read -r ADD_ROUTES
+
+    # Default to N if nothing entered
+    [ -z "$ADD_ROUTES" ] && ADD_ROUTES="N"
+
+    if [ "$ADD_ROUTES" = "y" ] || [ "$ADD_ROUTES" = "Y" ]; then
+        echo ""
+        echo "Enter additional IP ranges to advertise (comma-separated):"
+        echo "Examples:"
+        echo "  - 192.168.1.0/24 (single subnet)"
+        echo "  - 10.0.0.0/8,172.16.0.0/12 (multiple subnets)"
+        echo "  - 192.168.0.0/16 (larger range)"
+        echo ""
+        printf "Additional routes: "
+        read -r EXTRA_ROUTES
+
+        if [ -n "$EXTRA_ROUTES" ]; then
+            FINAL_ROUTES="0.0.0.0/0,::/0,$EXTRA_ROUTES"
+            echo "$FINAL_ROUTES" > /etc/tailscale-custom-routes
+            echo "✓ Custom routes saved: $FINAL_ROUTES"
+        else
+            echo "0.0.0.0/0,::/0" > /etc/tailscale-custom-routes
+            echo "✓ Using default routes only"
+        fi
+    else
+        echo "0.0.0.0/0,::/0" > /etc/tailscale-custom-routes
+        echo "✓ Using default routes: 0.0.0.0/0,::/0"
+    fi
+    echo ""
+}
 enable_cron_service() {
     # Check if cron service exists and enable it if not already enabled
     if [ -x /etc/init.d/cron ]; then
@@ -167,6 +215,23 @@ case "$1" in
         fi
 
         # We're already installed - set up everything
+        echo "=== Tailscale Exit Node Setup ==="
+        configure_routes
+
+    reconfigure)
+        # Allow reconfiguring routes without full reinstall
+        configure_routes
+        echo "Routes reconfigured. Restart Tailscale or run 'check' to apply:"
+        echo "  $0 check"
+        ;;
+    routes)
+        # Show current route configuration
+        if [ -f "/etc/tailscale-custom-routes" ]; then
+            echo "Current advertised routes:"
+            cat /etc/tailscale-custom-routes
+        else
+            echo "No custom routes configured. Using defaults: 0.0.0.0/0,::/0"
+        fi
         setup_boot_execution
         setup_cron
         setup_sysupgrade_preservation
