@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/ash
 # This script both checks Tailscale exit node status and ensures it runs at boot
 # Run this script directly to auto-install, or save as /etc/uci-defaults/99-tailscale-exitnode
 
@@ -12,14 +12,20 @@ self_install() {
 
     # Check if we're already in the target location
     if [ "$CURRENT_SCRIPT" = "$TARGET_PATH" ]; then
-        logger -t tailscale_exitnode "Script is already installed at $TARGET_PATH"
+        logger -t tailscale_exitnode "Script is already running from target location $TARGET_PATH"
         return 0
     fi
 
     # Create uci-defaults directory if it doesn't exist
     [ ! -d "/etc/uci-defaults" ] && mkdir -p /etc/uci-defaults
 
-    # Copy the script to the target location
+    # Always overwrite existing installation
+    if [ -f "$TARGET_PATH" ]; then
+        logger -t tailscale_exitnode "Overwriting existing script at $TARGET_PATH"
+        echo "⚠ Overwriting existing installation at $TARGET_PATH"
+    fi
+
+    # Copy the script to the target location (will overwrite if exists)
     if cp "$CURRENT_SCRIPT" "$TARGET_PATH" 2>/dev/null; then
         chmod +x "$TARGET_PATH"
         logger -t tailscale_exitnode "Script installed successfully to $TARGET_PATH"
@@ -69,7 +75,7 @@ check_tailscale_exit_node() {
     EXITNODE_STATUS=$(echo "$TAILSCALE_STATUS" | jsonfilter -e '$.Self.ExitNodeOption')
     if [ "$EXITNODE_STATUS" != "true" ]; then
         logger -t tailscale_exitnode "Exit node is disabled, enabling it now"
-        tailscale up --advertise-exit-node --accept-dns=true --accept-routes --advertise-routes=0.0.0.0/0,::/0
+        tailscale up --advertise-exit-node --accept-dns=true --accept-routes --advertise-routes=0.0.0.0/0,::/0,192.168.0.0/16
         logger -t tailscale_exitnode "Exit node has been enabled"
     else
         logger -t tailscale_exitnode "Exit node is already enabled"
