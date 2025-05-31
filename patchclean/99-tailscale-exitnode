@@ -1,249 +1,185 @@
 #!/bin/ash
-# This script both checks Tailscale exit node status and ensures it runs at boot
-# Run this script directly to auto-install, or save as /etc/uci-defaults/99-tailscale-exitnode
+# Tailscale Exit Node Auto-Configuration Script
+#
+# This script automatically configures and monitors a Tailscale exit node on OpenWrt.
+# Features:
+# - Auto-installs itself to /etc/uci-defaults/ for persistence across upgrades
+# - Interactive subnet route configuration with sensible defaults
+# - Sets up hourly monitoring via cron to ensure exit node stays enabled
+# - Configures boot-time execution to handle reboots
+# - Manages Tailscale service startup and connection verification
+#
+# Usage:
+#   ./script.sh           # Full interactive setup (default)
+#   ./script.sh install   # Force installation only
+#   ./script.sh check     # Check/enable exit node status
+#   ./script.sh routes    # Show current route configuration
+#   ./script.sh reconfigure # Reconfigure advertised routes
+#
+# The script preserves itself during sysupgrade and runs automatically after
+# installation to maintain exit node functionality without manual intervention.
 
-# Function to install the script itself
+SCRIPT_NAME="99-tailscale-exitnode"
+TARGET_PATH="/etc/uci-defaults/$SCRIPT_NAME"
+ROUTES_FILE="/etc/tailscale-custom-routes"
+DEFAULT_ROUTES="0.0.0.0/0,::/0"
+
+# Logging helper
+log() { logger -t tailscale_exitnode "$1"; }
+
+# File operations helper
+ensure_file() {
+    local file="$1" content="$2" mode="$3"
+    [ ! -f "$file" ] && { echo "$content" > "$file"; [ "$mode" ] && chmod "$mode" "$file"; }
+}
+
+# Service management helper
+manage_service() {
+    local service="$1" action="$2"
+    [ -x "/etc/init.d/$service" ] && "/etc/init.d/$service" "$action" 2>/dev/null
+}
+
+# Check if service is running
+is_running() { pgrep "$1" >/dev/null; }
+
+# Self-install if not in target location
 self_install() {
-    SCRIPT_NAME="99-tailscale-exitnode"
-    TARGET_PATH="/etc/uci-defaults/$SCRIPT_NAME"
+    [ "$0" = "$TARGET_PATH" ] && return 0
 
-    # Get the path of the current script
-    CURRENT_SCRIPT="$0"
+    mkdir -p "$(dirname "$TARGET_PATH")"
 
-    # Check if we're already in the target location
-    if [ "$CURRENT_SCRIPT" = "$TARGET_PATH" ]; then
-        logger -t tailscale_exitnode "Script is already running from target location $TARGET_PATH"
-        return 0
-    fi
-
-    # Create uci-defaults directory if it doesn't exist
-    [ ! -d "/etc/uci-defaults" ] && mkdir -p /etc/uci-defaults
-
-    # Always overwrite existing installation
+    # Check if target already exists and warn about overwrite
     if [ -f "$TARGET_PATH" ]; then
-        logger -t tailscale_exitnode "Overwriting existing script at $TARGET_PATH"
+        log "Overwriting existing script at $TARGET_PATH"
         echo "⚠ Overwriting existing installation at $TARGET_PATH"
     fi
 
-    # Copy the script to the target location (will overwrite if exists)
-    if cp "$CURRENT_SCRIPT" "$TARGET_PATH" 2>/dev/null; then
-        chmod +x "$TARGET_PATH"
-        logger -t tailscale_exitnode "Script installed successfully to $TARGET_PATH"
-        echo "✓ Script installed to $TARGET_PATH"
-
-        # Run the installed version to complete setup
-        "$TARGET_PATH"
-        echo "✓ Setup completed. The script will now run at boot and hourly via cron."
+    if cp "$0" "$TARGET_PATH" && chmod +x "$TARGET_PATH"; then
+        log "Script installed to $TARGET_PATH"
+        echo "✓ Installed to $TARGET_PATH"
+        "$TARGET_PATH" && echo "✓ Setup completed"
         return 0
     else
-        logger -t tailscale_exitnode "Failed to install script to $TARGET_PATH"
-        echo "✗ Failed to install script. Make sure you have write permissions."
+        log "Installation failed"
+        echo "✗ Installation failed"
         return 1
     fi
 }
 
-# Function to configure custom routes
+# Interactive route configuration
 configure_routes() {
-    echo ""
-    echo "=== Tailscale Route Configuration ==="
-    echo "Default routes: 0.0.0.0/0,::/0 (all internet traffic)"
-    echo ""
-    echo "Do you want to advertise additional subnet routes? (y/N)"
-    printf "Choice: "
-    read -r ADD_ROUTES
+    cat <<'EOF'
 
-    # Default to N if nothing entered
-    [ -z "$ADD_ROUTES" ] && ADD_ROUTES="N"
+=== Tailscale Route Configuration ===
+Default routes: 0.0.0.0/0,::/0 (all internet traffic)
 
-    if [ "$ADD_ROUTES" = "y" ] || [ "$ADD_ROUTES" = "Y" ]; then
-        echo ""
-        echo "Enter additional IP ranges to advertise (comma-separated):"
-        echo "Examples:"
-        echo "  - 192.168.1.0/24 (single subnet)"
-        echo "  - 10.0.0.0/8,172.16.0.0/12 (multiple subnets)"
-        echo "  - 192.168.0.0/16 (larger range)"
-        echo ""
-        printf "Additional routes: "
-        read -r EXTRA_ROUTES
-
-        if [ -n "$EXTRA_ROUTES" ]; then
-            FINAL_ROUTES="0.0.0.0/0,::/0,$EXTRA_ROUTES"
-            echo "$FINAL_ROUTES" > /etc/tailscale-custom-routes
-            echo "✓ Custom routes saved: $FINAL_ROUTES"
-        else
-            echo "0.0.0.0/0,::/0" > /etc/tailscale-custom-routes
-            echo "✓ Using default routes only"
-        fi
-    else
-        echo "0.0.0.0/0,::/0" > /etc/tailscale-custom-routes
-        echo "✓ Using default routes: 0.0.0.0/0,::/0"
-    fi
-    echo ""
-}
-
-# Function to check and enable cron service
-enable_cron_service() {
-    # Check if cron service exists and enable it if not already enabled
-    if [ -x /etc/init.d/cron ]; then
-        # Check if cron is enabled for startup
-        if ! /etc/init.d/cron enabled 2>/dev/null; then
-            logger -t tailscale_exitnode "Enabling cron service for startup"
-            /etc/init.d/cron enable
-        fi
-
-        # Check if cron is currently running
-        if ! pgrep crond >/dev/null && ! pgrep cron >/dev/null; then
-            logger -t tailscale_exitnode "Starting cron service"
-            /etc/init.d/cron start
-        fi
-    else
-        logger -t tailscale_exitnode "Cron service not found - may need to install cron package"
-    fi
-}
-
-# Function to check and enable Tailscale exit node
-check_tailscale_exit_node() {
-    # Check if Tailscale is installed
-    if ! command -v tailscale >/dev/null 2>&1; then
-        logger -t tailscale_exitnode "Tailscale is not installed"
-        return 1
-    fi
-
-    # Check if Tailscale service is running
-    if ! pgrep tailscaled >/dev/null; then
-        logger -t tailscale_exitnode "Tailscale daemon is not running"
-        # Attempt to start tailscale
-        if [ -x /etc/init.d/tailscale ]; then
-            logger -t tailscale_exitnode "Starting Tailscale service"
-            /etc/init.d/tailscale start
-            sleep 5  # Give it time to start
-        else
-            logger -t tailscale_exitnode "Tailscale init script not found"
-            return 1
-        fi
-    fi
-
-    # Check if Tailscale is connected
-    TAILSCALE_STATUS=$(tailscale status --json 2>/dev/null)
-    if [ $? -ne 0 ] || [ -z "$TAILSCALE_STATUS" ]; then
-        logger -t tailscale_exitnode "Failed to get Tailscale status"
-        return 1
-    fi
-
-    # Check if exit node is disabled and enable it if needed
-    EXITNODE_STATUS=$(echo "$TAILSCALE_STATUS" | jsonfilter -e '$.Self.ExitNodeOption')
-    if [ "$EXITNODE_STATUS" != "true" ]; then
-        logger -t tailscale_exitnode "Exit node is disabled, enabling it now"
-
-        # Read custom routes if they exist
-        CUSTOM_ROUTES_FILE="/etc/tailscale-custom-routes"
-        if [ -f "$CUSTOM_ROUTES_FILE" ]; then
-            ADVERTISE_ROUTES=$(cat "$CUSTOM_ROUTES_FILE")
-            logger -t tailscale_exitnode "Using custom routes: $ADVERTISE_ROUTES"
-        else
-            ADVERTISE_ROUTES="0.0.0.0/0,::/0"
-            logger -t tailscale_exitnode "Using default routes: $ADVERTISE_ROUTES"
-        fi
-
-        tailscale up --advertise-exit-node --accept-dns=true --accept-routes --advertise-routes="$ADVERTISE_ROUTES"
-        logger -t tailscale_exitnode "Exit node has been enabled with routes: $ADVERTISE_ROUTES"
-    else
-        logger -t tailscale_exitnode "Exit node is already enabled"
-    fi
-
-    return 0
-}
-
-# Add to rc.local to run this script at boot
-setup_boot_execution() {
-    if ! grep -q "/etc/uci-defaults/99-tailscale-exitnode" /etc/rc.local 2>/dev/null; then
-        # Create rc.local if it doesn't exist
-        [ ! -f /etc/rc.local ] && {
-            cat > /etc/rc.local <<'EOF'
-#!/bin/sh
-# Put your custom commands here that should be executed once
-# the system init finished. By default this file does nothing.
-exit 0
+Do you want to advertise additional subnet routes? (y/N)
 EOF
-            chmod +x /etc/rc.local
-        }
+    printf "Choice: "; read -r choice
 
-        # Add our script before the exit line
-        sed -i '/exit 0/i /etc/uci-defaults/99-tailscale-exitnode check &' /etc/rc.local
+    if [ "${choice:-N}" != "${choice#[Yy]}" ]; then
+        cat <<'EOF'
+
+Enter additional IP ranges (comma-separated):
+Examples: 192.168.1.0/24 or 10.0.0.0/8,172.16.0.0/12
+
+EOF
+        printf "Additional routes: "; read -r extra
+        echo "${DEFAULT_ROUTES}${extra:+,$extra}" > "$ROUTES_FILE"
+        echo "✓ Custom routes saved"
+    else
+        echo "$DEFAULT_ROUTES" > "$ROUTES_FILE"
+        echo "✓ Using default routes only"
     fi
 }
 
-# Set up cron job
+# Setup cron with service check
 setup_cron() {
-    # Ensure cron service is enabled first
-    enable_cron_service
-
-    crontab -l 2>/dev/null > /tmp/current_cron || echo "" > /tmp/current_cron
-    if ! grep -q "99-tailscale-exitnode" /tmp/current_cron; then
-        echo "# Check tailscale exit node status every hour" >> /tmp/current_cron
-        echo "0 * * * * /etc/uci-defaults/99-tailscale-exitnode check" >> /tmp/current_cron
-        sort -u /tmp/current_cron | crontab -
-        logger -t tailscale_exitnode "Added cron job for hourly Tailscale exit node checks"
+    # Enable cron service
+    if [ -x /etc/init.d/cron ]; then
+        manage_service cron enabled || manage_service cron enable
+        is_running "cron" || manage_service cron start
     fi
-    rm -f /tmp/current_cron
+
+    # Add cron job if not exists (check for exact path)
+    (crontab -l 2>/dev/null || echo "") | \
+    grep -q "$TARGET_PATH check" || {
+        (crontab -l 2>/dev/null; echo "# Tailscale exit node check"; echo "0 * * * * $TARGET_PATH check") | crontab -
+        log "Added hourly cron job"
+    }
 }
 
-# Ensure the script is preserved during upgrades
-setup_sysupgrade_preservation() {
+# Setup boot execution
+setup_boot() {
+    ensure_file /etc/rc.local "#!/bin/sh\nexit 0" +x
+    grep -q "$TARGET_PATH" /etc/rc.local || \
+        sed -i "/exit 0/i $TARGET_PATH check &" /etc/rc.local
+}
+
+# Setup upgrade preservation
+setup_preservation() {
+    local conf_file
     if [ -d /etc/sysupgrade.conf.d ]; then
-        echo "/etc/uci-defaults/99-tailscale-exitnode" > /etc/sysupgrade.conf.d/tailscale-exitnode
+        conf_file="/etc/sysupgrade.conf.d/tailscale-exitnode"
     elif [ -f /etc/sysupgrade.conf ]; then
-        grep -q "^/etc/uci-defaults/99-tailscale-exitnode$" /etc/sysupgrade.conf || \
-            echo "/etc/uci-defaults/99-tailscale-exitnode" >> /etc/sysupgrade.conf
+        conf_file="/etc/sysupgrade.conf"
+    fi
+
+    [ "$conf_file" ] && {
+        grep -q "^$TARGET_PATH$" "$conf_file" 2>/dev/null || echo "$TARGET_PATH" >> "$conf_file"
+    }
+}
+
+# Main Tailscale exit node check and configuration
+check_tailscale() {
+    # Verify Tailscale installation and service
+    command -v tailscale >/dev/null || { log "Tailscale not installed"; return 1; }
+
+    if ! is_running tailscaled; then
+        log "Starting Tailscale daemon"
+        manage_service tailscale start
+        sleep 5
+    fi
+
+    # Get status and check exit node
+    local status exitnode_enabled routes
+    status=$(tailscale status --json 2>/dev/null) || { log "Failed to get status"; return 1; }
+    exitnode_enabled=$(echo "$status" | jsonfilter -e '$.Self.ExitNodeOption' 2>/dev/null)
+
+    if [ "$exitnode_enabled" != "true" ]; then
+        routes=$([ -f "$ROUTES_FILE" ] && cat "$ROUTES_FILE" || echo "$DEFAULT_ROUTES")
+        log "Enabling exit node with routes: $routes"
+        tailscale up --advertise-exit-node --accept-dns=true --accept-routes --advertise-routes="$routes"
+        log "Exit node enabled"
+    else
+        log "Exit node already enabled"
     fi
 }
 
 # Main execution
-case "$1" in
+case "${1:-setup}" in
     check)
-        # Just check and enable exit node
-        check_tailscale_exit_node
-        ;;
+        check_tailscale ;;
     install)
-        # Force installation mode
-        self_install
-        ;;
+        self_install ;;
     reconfigure)
-        # Allow reconfiguring routes without full reinstall
         configure_routes
-        echo "Routes reconfigured. Restart Tailscale or run 'check' to apply:"
-        echo "  $0 check"
-        ;;
+        echo "Routes reconfigured. Run '$0 check' to apply" ;;
     routes)
-        # Show current route configuration
-        if [ -f "/etc/tailscale-custom-routes" ]; then
-            echo "Current advertised routes:"
-            cat /etc/tailscale-custom-routes
-        else
-            echo "No custom routes configured. Using defaults: 0.0.0.0/0,::/0"
-        fi
-        ;;
-    *)
-        # Check if we need to self-install first
-        if [ "$(basename "$0")" != "99-tailscale-exitnode" ] || [ "$(dirname "$0")" != "/etc/uci-defaults" ]; then
-            echo "Auto-installing script..."
-            self_install
-            exit $?
-        fi
+        echo "Current routes: $([ -f "$ROUTES_FILE" ] && cat "$ROUTES_FILE" || echo "$DEFAULT_ROUTES")" ;;
+    setup|*)
+        # Auto-install if needed
+        [ "$(basename "$0")" != "$SCRIPT_NAME" ] || [ "$(dirname "$0")" != "/etc/uci-defaults" ] && {
+            self_install; exit $?; }
 
-        # We're already installed - set up everything
+        # Full setup
         echo "=== Tailscale Exit Node Setup ==="
         configure_routes
-        setup_boot_execution
+        setup_boot
         setup_cron
-        setup_sysupgrade_preservation
-        
-        # Run the check now
-        check_tailscale_exit_node
-        
-        # Since this is a uci-defaults script, we should return 0
-        # to prevent it from being deleted after first boot
-        # This makes it persistent between upgrades
-        exit 1
-        ;;
+        setup_preservation
+        check_tailscale
+
+        # Return 1 to persist script through upgrades
+        exit 1 ;;
 esac
