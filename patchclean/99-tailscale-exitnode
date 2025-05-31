@@ -69,7 +69,7 @@ check_tailscale_exit_node() {
     EXITNODE_STATUS=$(echo "$TAILSCALE_STATUS" | jsonfilter -e '$.Self.ExitNodeOption')
     if [ "$EXITNODE_STATUS" != "true" ]; then
         logger -t tailscale_exitnode "Exit node is disabled, enabling it now"
-        tailscale up --advertise-exit-node --accept-dns=true --accept-routes --advertise-routes=0.0.0.0/0,::/0,192.168.0.0/16
+        tailscale up --advertise-exit-node --accept-dns=true --accept-routes --advertise-routes=0.0.0.0/0,::/0
         logger -t tailscale_exitnode "Exit node has been enabled"
     else
         logger -t tailscale_exitnode "Exit node is already enabled"
