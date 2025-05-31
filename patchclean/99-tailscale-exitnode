@@ -30,7 +30,16 @@ log() { logger -t tailscale_exitnode "$1"; }
 # File operations helper
 ensure_file() {
     local file="$1" content="$2" mode="$3"
-    [ ! -f "$file" ] && { printf "$content" > "$file"; [ "$mode" ] && chmod "$mode" "$file"; }
+    # More atomic file creation
+    if [ ! -f "$file" ]; then
+        local temp_file="${file}.tmp.$"
+        if printf "$content" > "$temp_file" && mv "$temp_file" "$file"; then
+            [ "$mode" ] && chmod "$mode" "$file"
+        else
+            rm -f "$temp_file"
+            return 1
+        fi
+    fi
 }
 
 # Service management helper
@@ -100,25 +109,45 @@ EOF
 
 # Setup cron with service check
 setup_cron() {
-    # Enable cron service
+    # Enable cron service (with error handling)
     if [ -x /etc/init.d/cron ]; then
         manage_service cron enabled || manage_service cron enable
         is_running "cron" || manage_service cron start
+    else
+        log "Cron service not available"
+        return 1
     fi
 
-    # Add cron job if not exists (check for exact path)
-    (crontab -l 2>/dev/null || echo "") | \
-    grep -q "$TARGET_PATH check" || {
-        (crontab -l 2>/dev/null; echo "# Tailscale exit node check"; echo "0 * * * * $TARGET_PATH check") | crontab -
-        log "Added hourly cron job"
-    }
+    # Add cron job if not exists (with safe crontab handling)
+    local current_cron temp_cron
+    current_cron=$(crontab -l 2>/dev/null || true)
+
+    if ! echo "$current_cron" | grep -qF "$TARGET_PATH check"; then
+        # Use /tmp with PID for temp file (more portable than mktemp)
+        temp_cron="/tmp/crontab.$"
+        {
+            echo "$current_cron"
+            echo "# Tailscale exit node check"
+            echo "0 * * * * $TARGET_PATH check"
+        } > "$temp_cron"
+
+        if crontab "$temp_cron"; then
+            log "Added hourly cron job"
+        else
+            log "Failed to update crontab"
+            rm -f "$temp_cron"
+            return 1
+        fi
+        rm -f "$temp_cron"
+    fi
 }
 
 # Setup boot execution
 setup_boot() {
     ensure_file /etc/rc.local "#!/bin/sh\n# Put your custom commands here\nexit 0" +x
-    grep -q "$TARGET_PATH" /etc/rc.local || \
-        sed -i "/exit 0/i $TARGET_PATH check &" /etc/rc.local
+    grep -qF "$TARGET_PATH" /etc/rc.local || \
+        sed -i "\|exit 0|i\\
+$TARGET_PATH check &" /etc/rc.local
 }
 
 # Setup upgrade preservation
@@ -154,9 +183,10 @@ check_tailscale() {
 
     if [ "$exitnode_enabled" != "true" ]; then
         routes=$([ -f "$ROUTES_FILE" ] && cat "$ROUTES_FILE" || echo "$DEFAULT_ROUTES")
-        # Validate routes format (basic check)
+        # Validate routes format (basic check - no spaces or invalid chars)
         case "$routes" in
             *[!0-9./,:]*) log "Invalid routes format: $routes"; return 1 ;;
+            *\ *) log "Routes cannot contain spaces: $routes"; return 1 ;;
         esac
         log "Enabling exit node with routes: $routes"
         tailscale up --advertise-exit-node --accept-dns=true --accept-routes --advertise-routes="$routes"
@@ -179,8 +209,9 @@ case "${1:-setup}" in
         echo "Current routes: $([ -f "$ROUTES_FILE" ] && cat "$ROUTES_FILE" || echo "$DEFAULT_ROUTES")" ;;
     setup|*)
         # Auto-install if needed
-        [ "$(basename "$0")" != "$SCRIPT_NAME" ] || [ "$(dirname "$0")" != "/etc/uci-defaults" ] && {
-            self_install; exit $?; }
+        if [ "$(basename "$0")" != "$SCRIPT_NAME" ] || [ "$(dirname "$0")" != "/etc/uci-defaults" ]; then
+            self_install; exit $?
+        fi
 
         # Full setup
         echo "=== Tailscale Exit Node Setup ==="
