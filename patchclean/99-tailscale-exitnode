@@ -42,6 +42,65 @@ self_install() {
     fi
 }
 
+# Function to configure custom routes
+configure_routes() {
+    echo ""
+    echo "=== Tailscale Route Configuration ==="
+    echo "Default routes: 0.0.0.0/0,::/0 (all internet traffic)"
+    echo ""
+    echo "Do you want to advertise additional subnet routes? (y/N)"
+    printf "Choice: "
+    read -r ADD_ROUTES
+
+    # Default to N if nothing entered
+    [ -z "$ADD_ROUTES" ] && ADD_ROUTES="N"
+
+    if [ "$ADD_ROUTES" = "y" ] || [ "$ADD_ROUTES" = "Y" ]; then
+        echo ""
+        echo "Enter additional IP ranges to advertise (comma-separated):"
+        echo "Examples:"
+        echo "  - 192.168.1.0/24 (single subnet)"
+        echo "  - 10.0.0.0/8,172.16.0.0/12 (multiple subnets)"
+        echo "  - 192.168.0.0/16 (larger range)"
+        echo ""
+        printf "Additional routes: "
+        read -r EXTRA_ROUTES
+
+        if [ -n "$EXTRA_ROUTES" ]; then
+            FINAL_ROUTES="0.0.0.0/0,::/0,$EXTRA_ROUTES"
+            echo "$FINAL_ROUTES" > /etc/tailscale-custom-routes
+            echo "✓ Custom routes saved: $FINAL_ROUTES"
+        else
+            echo "0.0.0.0/0,::/0" > /etc/tailscale-custom-routes
+            echo "✓ Using default routes only"
+        fi
+    else
+        echo "0.0.0.0/0,::/0" > /etc/tailscale-custom-routes
+        echo "✓ Using default routes: 0.0.0.0/0,::/0"
+    fi
+    echo ""
+}
+
+# Function to check and enable cron service
+enable_cron_service() {
+    # Check if cron service exists and enable it if not already enabled
+    if [ -x /etc/init.d/cron ]; then
+        # Check if cron is enabled for startup
+        if ! /etc/init.d/cron enabled 2>/dev/null; then
+            logger -t tailscale_exitnode "Enabling cron service for startup"
+            /etc/init.d/cron enable
+        fi
+
+        # Check if cron is currently running
+        if ! pgrep crond >/dev/null && ! pgrep cron >/dev/null; then
+            logger -t tailscale_exitnode "Starting cron service"
+            /etc/init.d/cron start
+        fi
+    else
+        logger -t tailscale_exitnode "Cron service not found - may need to install cron package"
+    fi
+}
+
 # Function to check and enable Tailscale exit node
 check_tailscale_exit_node() {
     # Check if Tailscale is installed
@@ -93,63 +152,6 @@ check_tailscale_exit_node() {
     fi
 
     return 0
-}
-
-# Function to configure custom routes
-configure_routes() {
-    echo ""
-    echo "=== Tailscale Route Configuration ==="
-    echo "Default routes: 0.0.0.0/0,::/0 (all internet traffic)"
-    echo ""
-    echo "Do you want to advertise additional subnet routes? (y/N)"
-    printf "Choice: "
-    read -r ADD_ROUTES
-
-    # Default to N if nothing entered
-    [ -z "$ADD_ROUTES" ] && ADD_ROUTES="N"
-
-    if [ "$ADD_ROUTES" = "y" ] || [ "$ADD_ROUTES" = "Y" ]; then
-        echo ""
-        echo "Enter additional IP ranges to advertise (comma-separated):"
-        echo "Examples:"
-        echo "  - 192.168.1.0/24 (single subnet)"
-        echo "  - 10.0.0.0/8,172.16.0.0/12 (multiple subnets)"
-        echo "  - 192.168.0.0/16 (larger range)"
-        echo ""
-        printf "Additional routes: "
-        read -r EXTRA_ROUTES
-
-        if [ -n "$EXTRA_ROUTES" ]; then
-            FINAL_ROUTES="0.0.0.0/0,::/0,$EXTRA_ROUTES"
-            echo "$FINAL_ROUTES" > /etc/tailscale-custom-routes
-            echo "✓ Custom routes saved: $FINAL_ROUTES"
-        else
-            echo "0.0.0.0/0,::/0" > /etc/tailscale-custom-routes
-            echo "✓ Using default routes only"
-        fi
-    else
-        echo "0.0.0.0/0,::/0" > /etc/tailscale-custom-routes
-        echo "✓ Using default routes: 0.0.0.0/0,::/0"
-    fi
-    echo ""
-}
-enable_cron_service() {
-    # Check if cron service exists and enable it if not already enabled
-    if [ -x /etc/init.d/cron ]; then
-        # Check if cron is enabled for startup
-        if ! /etc/init.d/cron enabled 2>/dev/null; then
-            logger -t tailscale_exitnode "Enabling cron service for startup"
-            /etc/init.d/cron enable
-        fi
-
-        # Check if cron is currently running
-        if ! pgrep crond >/dev/null && ! pgrep cron >/dev/null; then
-            logger -t tailscale_exitnode "Starting cron service"
-            /etc/init.d/cron start
-        fi
-    else
-        logger -t tailscale_exitnode "Cron service not found - may need to install cron package"
-    fi
 }
 
 # Add to rc.local to run this script at boot
@@ -206,18 +208,6 @@ case "$1" in
         # Force installation mode
         self_install
         ;;
-    *)
-        # Check if we need to self-install first
-        if [ "$(basename "$0")" != "99-tailscale-exitnode" ] || [ "$(dirname "$0")" != "/etc/uci-defaults" ]; then
-            echo "Auto-installing script..."
-            self_install
-            exit $?
-        fi
-
-        # We're already installed - set up everything
-        echo "=== Tailscale Exit Node Setup ==="
-        configure_routes
-        ;;
     reconfigure)
         # Allow reconfiguring routes without full reinstall
         configure_routes
@@ -232,6 +222,18 @@ case "$1" in
         else
             echo "No custom routes configured. Using defaults: 0.0.0.0/0,::/0"
         fi
+        ;;
+    *)
+        # Check if we need to self-install first
+        if [ "$(basename "$0")" != "99-tailscale-exitnode" ] || [ "$(dirname "$0")" != "/etc/uci-defaults" ]; then
+            echo "Auto-installing script..."
+            self_install
+            exit $?
+        fi
+
+        # We're already installed - set up everything
+        echo "=== Tailscale Exit Node Setup ==="
+        configure_routes
         setup_boot_execution
         setup_cron
         setup_sysupgrade_preservation
