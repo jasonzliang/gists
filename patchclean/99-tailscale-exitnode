@@ -30,7 +30,7 @@ log() { logger -t tailscale_exitnode "$1"; }
 # File operations helper
 ensure_file() {
     local file="$1" content="$2" mode="$3"
-    [ ! -f "$file" ] && { echo "$content" > "$file"; [ "$mode" ] && chmod "$mode" "$file"; }
+    [ ! -f "$file" ] && { printf "$content" > "$file"; [ "$mode" ] && chmod "$mode" "$file"; }
 }
 
 # Service management helper
@@ -40,7 +40,12 @@ manage_service() {
 }
 
 # Check if service is running
-is_running() { pgrep "$1" >/dev/null; }
+is_running() {
+    case "$1" in
+        cron) pgrep -x crond >/dev/null || pgrep -x cron >/dev/null ;;
+        *) pgrep "$1" >/dev/null ;;
+    esac
+}
 
 # Self-install if not in target location
 self_install() {
@@ -111,7 +116,7 @@ setup_cron() {
 
 # Setup boot execution
 setup_boot() {
-    ensure_file /etc/rc.local "#!/bin/sh\nexit 0" +x
+    ensure_file /etc/rc.local "#!/bin/sh\n# Put your custom commands here\nexit 0" +x
     grep -q "$TARGET_PATH" /etc/rc.local || \
         sed -i "/exit 0/i $TARGET_PATH check &" /etc/rc.local
 }
@@ -134,6 +139,7 @@ setup_preservation() {
 check_tailscale() {
     # Verify Tailscale installation and service
     command -v tailscale >/dev/null || { log "Tailscale not installed"; return 1; }
+    command -v jsonfilter >/dev/null || { log "jsonfilter not available"; return 1; }
 
     if ! is_running tailscaled; then
         log "Starting Tailscale daemon"
@@ -148,6 +154,10 @@ check_tailscale() {
 
     if [ "$exitnode_enabled" != "true" ]; then
         routes=$([ -f "$ROUTES_FILE" ] && cat "$ROUTES_FILE" || echo "$DEFAULT_ROUTES")
+        # Validate routes format (basic check)
+        case "$routes" in
+            *[!0-9./,:]*) log "Invalid routes format: $routes"; return 1 ;;
+        esac
         log "Enabling exit node with routes: $routes"
         tailscale up --advertise-exit-node --accept-dns=true --accept-routes --advertise-routes="$routes"
         log "Exit node enabled"
