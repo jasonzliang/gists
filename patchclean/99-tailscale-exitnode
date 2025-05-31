@@ -1,7 +1,40 @@
 #!/bin/sh
-
 # This script both checks Tailscale exit node status and ensures it runs at boot
-# Save as /etc/uci-defaults/99-tailscale-exitnode and make executable
+# Run this script directly to auto-install, or save as /etc/uci-defaults/99-tailscale-exitnode
+
+# Function to install the script itself
+self_install() {
+    SCRIPT_NAME="99-tailscale-exitnode"
+    TARGET_PATH="/etc/uci-defaults/$SCRIPT_NAME"
+
+    # Get the path of the current script
+    CURRENT_SCRIPT="$0"
+
+    # Check if we're already in the target location
+    if [ "$CURRENT_SCRIPT" = "$TARGET_PATH" ]; then
+        logger -t tailscale_exitnode "Script is already installed at $TARGET_PATH"
+        return 0
+    fi
+
+    # Create uci-defaults directory if it doesn't exist
+    [ ! -d "/etc/uci-defaults" ] && mkdir -p /etc/uci-defaults
+
+    # Copy the script to the target location
+    if cp "$CURRENT_SCRIPT" "$TARGET_PATH" 2>/dev/null; then
+        chmod +x "$TARGET_PATH"
+        logger -t tailscale_exitnode "Script installed successfully to $TARGET_PATH"
+        echo "✓ Script installed to $TARGET_PATH"
+
+        # Run the installed version to complete setup
+        "$TARGET_PATH"
+        echo "✓ Setup completed. The script will now run at boot and hourly via cron."
+        return 0
+    else
+        logger -t tailscale_exitnode "Failed to install script to $TARGET_PATH"
+        echo "✗ Failed to install script. Make sure you have write permissions."
+        return 1
+    fi
+}
 
 # Function to check and enable Tailscale exit node
 check_tailscale_exit_node() {
@@ -34,7 +67,6 @@ check_tailscale_exit_node() {
 
     # Check if exit node is disabled and enable it if needed
     EXITNODE_STATUS=$(echo "$TAILSCALE_STATUS" | jsonfilter -e '$.Self.ExitNodeOption')
-
     if [ "$EXITNODE_STATUS" != "true" ]; then
         logger -t tailscale_exitnode "Exit node is disabled, enabling it now"
         tailscale up --advertise-exit-node --accept-dns=true --accept-routes --advertise-routes=0.0.0.0/0,::/0,192.168.0.0/16
@@ -42,8 +74,28 @@ check_tailscale_exit_node() {
     else
         logger -t tailscale_exitnode "Exit node is already enabled"
     fi
-    
+
     return 0
+}
+
+# Function to check and enable cron service
+enable_cron_service() {
+    # Check if cron service exists and enable it if not already enabled
+    if [ -x /etc/init.d/cron ]; then
+        # Check if cron is enabled for startup
+        if ! /etc/init.d/cron enabled 2>/dev/null; then
+            logger -t tailscale_exitnode "Enabling cron service for startup"
+            /etc/init.d/cron enable
+        fi
+
+        # Check if cron is currently running
+        if ! pgrep crond >/dev/null && ! pgrep cron >/dev/null; then
+            logger -t tailscale_exitnode "Starting cron service"
+            /etc/init.d/cron start
+        fi
+    else
+        logger -t tailscale_exitnode "Cron service not found - may need to install cron package"
+    fi
 }
 
 # Add to rc.local to run this script at boot
@@ -55,12 +107,11 @@ setup_boot_execution() {
 #!/bin/sh
 # Put your custom commands here that should be executed once
 # the system init finished. By default this file does nothing.
-
 exit 0
 EOF
             chmod +x /etc/rc.local
         }
-        
+
         # Add our script before the exit line
         sed -i '/exit 0/i /etc/uci-defaults/99-tailscale-exitnode check &' /etc/rc.local
     fi
@@ -68,11 +119,15 @@ EOF
 
 # Set up cron job
 setup_cron() {
+    # Ensure cron service is enabled first
+    enable_cron_service
+
     crontab -l 2>/dev/null > /tmp/current_cron || echo "" > /tmp/current_cron
     if ! grep -q "99-tailscale-exitnode" /tmp/current_cron; then
         echo "# Check tailscale exit node status every hour" >> /tmp/current_cron
         echo "0 * * * * /etc/uci-defaults/99-tailscale-exitnode check" >> /tmp/current_cron
         sort -u /tmp/current_cron | crontab -
+        logger -t tailscale_exitnode "Added cron job for hourly Tailscale exit node checks"
     fi
     rm -f /tmp/current_cron
 }
@@ -93,8 +148,19 @@ case "$1" in
         # Just check and enable exit node
         check_tailscale_exit_node
         ;;
+    install)
+        # Force installation mode
+        self_install
+        ;;
     *)
-        # First time installation - set up everything
+        # Check if we need to self-install first
+        if [ "$(basename "$0")" != "99-tailscale-exitnode" ] || [ "$(dirname "$0")" != "/etc/uci-defaults" ]; then
+            echo "Auto-installing script..."
+            self_install
+            exit $?
+        fi
+
+        # We're already installed - set up everything
         setup_boot_execution
         setup_cron
         setup_sysupgrade_preservation
