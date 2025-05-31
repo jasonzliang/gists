@@ -217,7 +217,7 @@ case "$1" in
         # We're already installed - set up everything
         echo "=== Tailscale Exit Node Setup ==="
         configure_routes
-
+        ;;
     reconfigure)
         # Allow reconfiguring routes without full reinstall
         configure_routes
