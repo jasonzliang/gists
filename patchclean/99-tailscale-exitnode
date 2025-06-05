@@ -91,20 +91,24 @@ Do you want to advertise additional subnet routes? (y/N)
 EOF
     printf "Choice: "; read -r choice
 
-    if [ "${choice:-N}" != "${choice#[Yy]}" ]; then
-        cat <<'EOF'
+    # Clearer logic
+    case "${choice:-n}" in
+        [Yy]*)
+            cat <<'EOF'
 
 Enter additional IP ranges (comma-separated):
 Examples: 192.168.1.0/24 or 10.0.0.0/8,172.16.0.0/12
 
 EOF
-        printf "Additional routes: "; read -r extra
-        echo "${DEFAULT_ROUTES}${extra:+,$extra}" > "$ROUTES_FILE"
-        echo "✓ Custom routes saved"
-    else
-        echo "$DEFAULT_ROUTES" > "$ROUTES_FILE"
-        echo "✓ Using default routes only"
-    fi
+            printf "Additional routes: "; read -r extra
+            echo "${DEFAULT_ROUTES}${extra:+,$extra}" > "$ROUTES_FILE"
+            echo "✓ Custom routes saved"
+            ;;
+        *)
+            echo "$DEFAULT_ROUTES" > "$ROUTES_FILE"
+            echo "✓ Using default routes only"
+            ;;
+    esac
 }
 
 # Setup cron with service check
