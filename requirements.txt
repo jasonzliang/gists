@@ -40,7 +40,7 @@ fschat
 
 # Utility libraries
 packaging
-piptools
+# piptools
 
 # OpenAI API
 openai
