@@ -56,6 +56,17 @@ is_running() {
     esac
 }
 
+# Setup alias in .ashrc
+setup_alias() {
+    local ashrc="/root/.ashrc"
+    local alias_line="alias exitnode=\"$TARGET_PATH check\""
+
+    if [ ! -f "$ashrc" ] || ! grep -qF "alias exitnode=" "$ashrc"; then
+        echo "$alias_line" >> "$ashrc"
+        log "Added exitnode alias to $ashrc"
+    fi
+}
+
 # Self-install if not in target location
 self_install() {
     [ "$0" = "$TARGET_PATH" ] && return 0
@@ -223,6 +234,7 @@ case "${1:-setup}" in
         setup_boot
         setup_cron
         setup_preservation
+        setup_alias
         check_tailscale
 
         # Return 1 to persist script through upgrades
