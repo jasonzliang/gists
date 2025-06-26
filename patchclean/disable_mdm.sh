@@ -1,16 +1,12 @@
 #!/bin/bash
 
-# Script to remove forced MDM enrollment in normal macOS mode
+# Script to block Setup Assistant forced MDM enrollment
 # Prerequisites: SIP must be disabled, run with sudo
-#
-# IMPORTANT: This script makes system-level changes that could affect
-# your device's security and management. Use at your own risk.
 
 set -e  # Exit on any error
 
-echo "=== MDM Removal Script for Normal macOS Mode ==="
-echo "Prerequisites: SIP disabled, running with sudo"
-echo "WARNING: This will remove MDM enrollment and modify system files"
+echo "=== Setup Assistant MDM Blocker ==="
+echo "This will prevent Setup Assistant from forcing MDM enrollment"
 echo "Press Enter to continue or Ctrl+C to abort..."
 read
 
@@ -32,213 +28,104 @@ if echo "$SIP_STATUS" | grep -q "enabled"; then
     echo "ERROR: System Integrity Protection is enabled"
     echo "SIP must be disabled to modify system files"
     echo "Current status: $SIP_STATUS"
-    echo ""
-    echo "To disable SIP:"
-    echo "1. Restart and hold Cmd+R to enter Recovery Mode"
-    echo "2. Open Terminal and run: csrutil disable"
-    echo "3. Restart normally and run this script again"
     exit 1
 fi
 
 log "SIP Status: $SIP_STATUS"
-log "Starting MDM removal process..."
 
-# Use root filesystem since we're in normal mode
-SYSTEM_ROOT="/"
+# Setup Assistant path
+SETUP_ASSISTANT="/System/Library/CoreServices/Setup Assistant.app/Contents/MacOS/Setup Assistant"
 
-# Verify we can see system files
-if [ ! -d "$SYSTEM_ROOT/System/Library" ]; then
-    log "✗ System files not found at $SYSTEM_ROOT"
+# Check if Setup Assistant exists
+if [ ! -f "$SETUP_ASSISTANT" ]; then
+    log "✗ Setup Assistant not found at: $SETUP_ASSISTANT"
     exit 1
 fi
 
-log "✓ System files found at $SYSTEM_ROOT"
+log "✓ Found Setup Assistant at: $SETUP_ASSISTANT"
 
 # Make system volume writable
 log "Making system volume writable..."
 if mount -uw / 2>/dev/null; then
     log "✓ System volume remounted as writable"
 else
-    log "⚠ Could not remount as writable - continuing anyway"
+    log "✗ Failed to remount system volume as writable"
+    exit 1
 fi
 
-# Kill MDM processes aggressively
-log "Killing MDM-related processes..."
-MDM_PROCESSES=(
-    "ManagedClient"
-    "mdmclient"
-    "mbsystemadministration"
-    "mbusertrampoline"
-    "betaenrollmentd"
-    "Setup Assistant"
-)
-
-for process in "${MDM_PROCESSES[@]}"; do
-    pids=$(pgrep -f "$process" 2>/dev/null || true)
-    if [ -n "$pids" ]; then
-        log "Killing $process processes: $pids"
-        echo "$pids" | xargs kill -9 2>/dev/null || log "⚠ Could not kill some $process processes"
-    else
-        log "No $process processes found"
-    fi
-done
-
-# Remove MDM launch daemons
-log "Removing MDM launch daemons..."
-MDM_PLISTS=(
-    "/System/Library/LaunchDaemons/com.apple.ManagedClient.enroll.plist"
-    "/System/Library/LaunchDaemons/com.apple.ManagedClient.plist"
-    "/System/Library/LaunchDaemons/com.apple.mdmclient.daemon.runatboot.plist"
-    "/System/Library/LaunchDaemons/com.apple.mdmclient.daemon.plist"
-    "/System/Library/LaunchDaemons/com.apple.mbsystemadministration.plist"
-    "/System/Library/LaunchDaemons/com.apple.mbusertrampoline.plist"
-    "/System/Library/LaunchDaemons/com.apple.betaenrollmentd.plist"
-)
-
-for plist in "${MDM_PLISTS[@]}"; do
-    if [ -f "$plist" ]; then
-        plist_name=$(basename "$plist")
-        log "Removing $plist_name"
-
-        if rm -f "$plist" 2>/dev/null; then
-            log "✓ Removed $plist_name"
-        else
-            log "✗ Failed to remove $plist_name"
-        fi
-    else
-        log "⚠ File not found: $(basename "$plist")"
-    fi
-done
-
-# Remove Setup Assistant binary
-log "Removing Setup Assistant binary..."
-SETUP_ASSISTANT="/System/Library/CoreServices/Setup Assistant.app/Contents/MacOS/Setup Assistant"
-if [ -f "$SETUP_ASSISTANT" ]; then
-    if rm -f "$SETUP_ASSISTANT" 2>/dev/null; then
-        log "✓ Removed Setup Assistant binary"
-    else
-        log "✗ Failed to remove Setup Assistant binary"
-    fi
+# Backup original Setup Assistant
+log "Backing up original Setup Assistant..."
+if cp "$SETUP_ASSISTANT" "${SETUP_ASSISTANT}.original" 2>/dev/null; then
+    log "✓ Original Setup Assistant backed up"
 else
-    log "⚠ Setup Assistant binary not found"
+    log "✗ Failed to backup Setup Assistant"
+    exit 1
 fi
 
-# Remove entire Setup Assistant app bundle
-SETUP_ASSISTANT_APP="/System/Library/CoreServices/Setup Assistant.app"
-if [ -d "$SETUP_ASSISTANT_APP" ]; then
-    log "Removing Setup Assistant app bundle..."
-    if rm -rf "$SETUP_ASSISTANT_APP" 2>/dev/null; then
-        log "✓ Removed Setup Assistant app bundle"
-    else
-        log "✗ Failed to remove Setup Assistant app bundle"
-    fi
-fi
+# Create wrapper script that blocks MDM enrollment
+log "Creating MDM blocking wrapper..."
+cat > "$SETUP_ASSISTANT" << 'EOF'
+#!/bin/bash
 
-# Remove MDM configuration profiles
-log "Removing MDM configuration profiles..."
-if [ -d "/var/db/ConfigurationProfiles" ]; then
-    rm -rf "/var/db/ConfigurationProfiles"/* 2>/dev/null && log "✓ Removed configuration profiles"
-fi
+# Setup Assistant wrapper that blocks forced MDM enrollment
+ORIGINAL_BINARY="${0}.original"
 
-# Remove MDM preferences
-log "Clearing MDM preferences..."
-MDM_PREFS=(
-    "/Library/Preferences/com.apple.mdmclient.plist"
-    "/Library/Preferences/com.apple.ManagedClient.plist"
-    "/Library/Managed Preferences"
-    "/private/var/db/ConfigurationProfiles"
-)
+# Check if both problematic flags are present
+has_minibuddy=false
+has_force_mdm=false
 
-for pref in "${MDM_PREFS[@]}"; do
-    if [ -e "$pref" ]; then
-        if rm -rf "$pref" 2>/dev/null; then
-            log "✓ Removed $(basename "$pref")"
-        else
-            log "⚠ Could not remove $(basename "$pref")"
-        fi
-    fi
+for arg in "$@"; do
+    case "$arg" in
+        -MiniBuddyYes)
+            has_minibuddy=true
+            ;;
+        -ForceMDMEnroll)
+            has_force_mdm=true
+            ;;
+    esac
 done
 
-# Clear user-level MDM preferences for all users
-log "Clearing user-level MDM preferences..."
-for user_home in /Users/*; do
-    if [ -d "$user_home" ] && [ "$(basename "$user_home")" != "Shared" ]; then
-        user_name=$(basename "$user_home")
-        user_prefs="$user_home/Library/Preferences/com.apple.mdmclient.plist"
-
-        if [ -f "$user_prefs" ]; then
-            if rm -f "$user_prefs" 2>/dev/null; then
-                log "✓ Removed MDM preferences for user: $user_name"
-            fi
-        fi
-    fi
-done
-
-# Remove MDM binaries
-log "Removing MDM binaries..."
-MDM_BINARIES=(
-    "/usr/libexec/mdmclient"
-    "/usr/bin/profiles"
-    "/System/Library/PrivateFrameworks/ManagedConfiguration.framework"
-    "/System/Library/PrivateFrameworks/ConfigurationProfiles.framework"
-)
-
-for binary in "${MDM_BINARIES[@]}"; do
-    if [ -e "$binary" ]; then
-        if rm -rf "$binary" 2>/dev/null; then
-            log "✓ Removed $(basename "$binary")"
-        else
-            log "⚠ Could not remove $(basename "$binary")"
-        fi
-    fi
-done
-
-# Clear system caches
-log "Clearing system caches..."
-if command -v kextcache >/dev/null 2>&1; then
-    kextcache -clear-staging 2>/dev/null && log "✓ Cleared kext staging cache"
+# If both flags are present, block execution
+if [ "$has_minibuddy" = true ] && [ "$has_force_mdm" = true ]; then
+    echo "Setup Assistant blocked: Forced MDM enrollment detected"
+    echo "Arguments were: $*"
+    echo "Blocking execution to prevent forced enrollment"
+    exit 0
 fi
 
-# Reset launch services database
-if [ -f "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister" ]; then
-    /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -kill -r -domain local -domain system -domain user 2>/dev/null && log "✓ Reset launch services database"
-fi
-
-# Kill any remaining MDM processes one more time
-log "Final cleanup - killing any remaining MDM processes..."
-for process in "${MDM_PROCESSES[@]}"; do
-    pids=$(pgrep -f "$process" 2>/dev/null || true)
-    if [ -n "$pids" ]; then
-        echo "$pids" | xargs kill -9 2>/dev/null || true
-    fi
-done
-
-# Final summary
-log "=== MDM Removal Complete ==="
-log "✓ MDM processes killed"
-log "✓ MDM launch daemons removed"
-log "✓ Setup Assistant removed"
-log "✓ Configuration profiles removed"
-log "✓ MDM preferences cleared"
-log "✓ User-level MDM preferences cleared"
-log "✓ MDM binaries removed"
-log "✓ System caches cleared"
-log ""
-log "IMPORTANT NEXT STEPS:"
-log "1. Restart your Mac to complete the process"
-log "2. MDM enrollment should now be completely disabled"
-log "3. Consider re-enabling SIP for better security: csrutil enable (in Recovery Mode)"
-log ""
-log "WARNING: Your system security is reduced with SIP disabled."
-log "Re-enable SIP after confirming MDM removal works if possible."
-
-echo ""
-echo "Restart now to complete MDM removal? (y/N)"
-read -r restart_choice
-
-if [[ "$restart_choice" =~ ^[Yy]$ ]]; then
-    log "Restarting system..."
-    reboot
+# Otherwise, run the original Setup Assistant with all arguments
+if [ -f "$ORIGINAL_BINARY" ]; then
+    exec "$ORIGINAL_BINARY" "$@"
 else
-    log "Restart manually when ready to complete the process."
+    echo "Error: Original Setup Assistant binary not found"
+    exit 1
 fi
+EOF
+
+# Make the wrapper executable
+if chmod +x "$SETUP_ASSISTANT" 2>/dev/null; then
+    log "✓ Setup Assistant wrapper created and made executable"
+else
+    log "✗ Failed to make Setup Assistant wrapper executable"
+    exit 1
+fi
+
+# Verify the wrapper was created correctly
+if [ -f "$SETUP_ASSISTANT" ] && [ -f "${SETUP_ASSISTANT}.original" ]; then
+    log "✓ Verification successful:"
+    log "  - Wrapper: $SETUP_ASSISTANT"
+    log "  - Original: ${SETUP_ASSISTANT}.original"
+else
+    log "✗ Verification failed"
+    exit 1
+fi
+
+log "=== Setup Complete ==="
+log "✓ Setup Assistant will now block forced MDM enrollment"
+log "✓ When called with -MiniBuddyYes -ForceMDMEnroll, it will exit without running"
+log "✓ Normal Setup Assistant functionality is preserved for other use cases"
+log ""
+log "To restore original Setup Assistant:"
+log "sudo mv '${SETUP_ASSISTANT}.original' '$SETUP_ASSISTANT'"
+log ""
+log "The modification is now active. No restart required."
