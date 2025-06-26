@@ -18,8 +18,170 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1"
 }
 
+# Function to find system volume
+find_system_volume() {
+    log "Searching for system volume..."
+
+    # First, get the diskutil list output and parse it properly
+    local diskutil_output=$(diskutil list)
+
+    # Look for APFS volumes that could be system volumes
+    # Priority order: exact "Macintosh HD", then system-like names
+    local candidates=()
+
+    # Parse diskutil list to find APFS volumes with their identifiers
+    while IFS= read -r line; do
+        if echo "$line" | grep -q "APFS Volume"; then
+            local identifier=$(echo "$line" | awk '{print $NF}')
+            local name=$(echo "$line" | sed 's/.*APFS Volume[[:space:]]*//' | sed 's/[[:space:]]*[[:space:]][[:space:]]*[0-9.].*$//')
+
+            log "Found APFS volume: $name ($identifier)"
+
+            # Prioritize exact matches for system volume names
+            case "$name" in
+                "Macintosh HD")
+                    log "Found exact match for Macintosh HD: $identifier"
+                    candidates=("$identifier" "${candidates[@]}")  # Put at front
+                    ;;
+                "macOS "*|"Mac OS "*|*" System")
+                    log "Found system-like volume: $name ($identifier)"
+                    candidates+=("$identifier")
+                    ;;
+            esac
+        fi
+    done <<< "$diskutil_output"
+
+    # Test candidates in order
+    for vol in "${candidates[@]}"; do
+        log "Testing candidate volume: $vol"
+
+        # Get detailed volume info
+        local vol_info=$(diskutil info "$vol" 2>/dev/null)
+        if [ $? -eq 0 ]; then
+            log "Volume info for $vol:"
+            echo "$vol_info" | grep -E "(Volume Name|Volume Role|Mount Point)" | while read line; do
+                log "  $line"
+            done
+
+            # Check if it's a system volume by multiple criteria
+            local is_system=false
+
+            # Check for system role
+            if echo "$vol_info" | grep -q "Volume Role.*System"; then
+                log "✓ $vol has System role"
+                is_system=true
+            fi
+
+            # Check for system volume name patterns
+            if echo "$vol_info" | grep -q "Volume Name.*Macintosh HD$"; then
+                log "✓ $vol is named 'Macintosh HD' (exact match)"
+                is_system=true
+            fi
+
+            # Check if it's bootable (has System/Library)
+            local mount_pt=$(echo "$vol_info" | grep "Mount Point" | sed 's/.*Mount Point:[[:space:]]*//')
+            if [ -n "$mount_pt" ] && [ -d "$mount_pt/System/Library" ]; then
+                log "✓ $vol contains System/Library at $mount_pt"
+                is_system=true
+            fi
+
+            if [ "$is_system" = true ]; then
+                log "Selected system volume: $vol"
+                echo "$vol"
+                return 0
+            fi
+        fi
+    done
+
+    # Fallback: try your specific disk layout patterns
+    local fallback_candidates=("disk3s3" "disk1s1" "disk1s5" "disk0s2")
+    log "No system volume found, trying fallback candidates..."
+
+    for candidate in "${fallback_candidates[@]}"; do
+        log "Testing fallback candidate: $candidate"
+        if diskutil info "$candidate" >/dev/null 2>&1; then
+            local info=$(diskutil info "$candidate" 2>/dev/null)
+            if echo "$info" | grep -q "Apple_APFS"; then
+                local vol_name=$(echo "$info" | grep "Volume Name" | sed 's/.*Volume Name:[[:space:]]*//')
+                log "Found APFS volume: $vol_name ($candidate)"
+
+                # Accept any APFS volume as last resort, but prefer Macintosh HD
+                if echo "$vol_name" | grep -q "Macintosh HD"; then
+                    log "✓ Fallback found Macintosh HD: $candidate"
+                    echo "$candidate"
+                    return 0
+                fi
+            fi
+        fi
+    done
+
+    # Final fallback - accept any APFS volume that might be a system volume
+    for candidate in "${fallback_candidates[@]}"; do
+        if diskutil info "$candidate" >/dev/null 2>&1; then
+            local info=$(diskutil info "$candidate" 2>/dev/null)
+            if echo "$info" | grep -q "Apple_APFS"; then
+                log "Using APFS volume as final fallback: $candidate"
+                echo "$candidate"
+                return 0
+            fi
+        fi
+    done
+
+    return 1
+}
+
+# Function to mount system volume
+mount_system_volume() {
+    local disk="$1"
+    log "Attempting to mount $disk..."
+
+    # First check if already mounted
+    local mount_point=$(diskutil info "$disk" 2>/dev/null | grep "Mount Point" | sed 's/.*Mount Point: *//' | sed 's/[[:space:]]*$//')
+
+    if [ -n "$mount_point" ] && [ "$mount_point" != "Not applicable (not mounted)" ]; then
+        log "Volume already mounted at: $mount_point"
+        echo "$mount_point"
+        return 0
+    fi
+
+    # Try to mount
+    log "Mounting $disk..."
+    local mount_output
+    if mount_output=$(diskutil mount "$disk" 2>&1); then
+        log "Mount command succeeded"
+        log "Mount output: $mount_output"
+
+        # Extract mount point from output
+        mount_point=$(echo "$mount_output" | grep -o "/Volumes/[^[:space:]]*" | head -1)
+
+        if [ -z "$mount_point" ]; then
+            # Try to get mount point from diskutil info
+            mount_point=$(diskutil info "$disk" 2>/dev/null | grep "Mount Point" | sed 's/.*Mount Point: *//' | sed 's/[[:space:]]*$//')
+        fi
+
+        if [ -n "$mount_point" ] && [ -d "$mount_point" ]; then
+            log "Successfully mounted at: $mount_point"
+            echo "$mount_point"
+            return 0
+        fi
+    else
+        log "Mount command failed with output: $mount_output"
+    fi
+
+    # Check if it mounted somewhere else
+    log "Checking for any new mounts in /Volumes..."
+    for vol in /Volumes/*/; do
+        if [ -d "$vol" ] && [ -d "${vol}System/Library" ]; then
+            log "Found system files at: $vol"
+            echo "$vol"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
 # Check if running in Recovery Mode
-# In Recovery Mode, csrutil should work and show current status
 SIP_STATUS=$(csrutil status 2>/dev/null)
 if [ $? -ne 0 ]; then
     echo "ERROR: Cannot check SIP status. This script must be run in Recovery Mode"
@@ -43,39 +205,19 @@ else
     exit 1
 fi
 
-# Step 2: Mount the system volume as writable
-log "Mounting system volume as writable..."
-
-# In Recovery Mode, we need to find and mount the actual system volume
-log "Available volumes:"
+# Step 2: Find and mount the system volume
+log "Finding system volume..."
 diskutil list
 
-# Try the most likely candidates in order
-CANDIDATES=("disk0s2" "disk1s1" "disk1s5" "disk2s1")
-
-SYSTEM_DISK=""
-for candidate in "${CANDIDATES[@]}"; do
-    log "Trying candidate: $candidate"
-    if diskutil info "$candidate" >/dev/null 2>&1; then
-        # Check if this looks like a system volume
-        VOLUME_INFO=$(diskutil info "$candidate" 2>/dev/null)
-        if echo "$VOLUME_INFO" | grep -q "Apple_APFS"; then
-            log "✓ Found APFS volume: $candidate"
-            SYSTEM_DISK="$candidate"
-            break
-        fi
-    fi
-done
-
-# If no candidates worked, ask user
+SYSTEM_DISK=$(find_system_volume)
 if [ -z "$SYSTEM_DISK" ]; then
+    log "Could not automatically detect system volume."
     echo ""
-    echo "Could not automatically detect system volume."
     echo "Available APFS volumes:"
     diskutil list | grep -E "(identifier|Apple_APFS)" | grep -B1 "Apple_APFS"
     echo ""
-    echo "Which disk contains your macOS system? (e.g., disk0s2)"
-    echo "Enter disk identifier: "
+    echo "Which disk contains your macOS system? (e.g., disk1s1)"
+    echo -n "Enter disk identifier: "
     read -r SYSTEM_DISK
 
     if [ -z "$SYSTEM_DISK" ]; then
@@ -86,71 +228,22 @@ fi
 
 log "Using system disk: $SYSTEM_DISK"
 
-# Mount the disk
-log "Mounting $SYSTEM_DISK..."
-
-# Try mounting with timeout
-if timeout 30 diskutil mount "$SYSTEM_DISK" >/tmp/mount_output 2>&1; then
-    MOUNT_OUTPUT=$(cat /tmp/mount_output)
-    log "✓ Mount completed"
-else
-    log "Mount command timed out or failed. Checking if already mounted..."
-    MOUNT_OUTPUT=$(cat /tmp/mount_output 2>/dev/null || echo "No output")
+# Mount the system volume
+MOUNT_POINT=$(mount_system_volume "$SYSTEM_DISK")
+if [ $? -ne 0 ] || [ -z "$MOUNT_POINT" ]; then
+    log "✗ Failed to mount system volume"
+    log "Manual intervention required:"
+    log "1. Try running: diskutil mount $SYSTEM_DISK"
+    log "2. Or check available volumes with: diskutil list"
+    exit 1
 fi
 
-log "Mount output: $MOUNT_OUTPUT"
-
-# Check if it's already mounted by looking at diskutil list
-ALREADY_MOUNTED=$(diskutil list | grep "$SYSTEM_DISK" | grep -o "/Volumes/[^[:space:]]*")
-if [ -n "$ALREADY_MOUNTED" ]; then
-    MOUNT_POINT="$ALREADY_MOUNTED"
-    log "✓ Volume already mounted at: $MOUNT_POINT"
-else
-    # Find where it mounted from the mount output
-    MOUNT_POINT=$(echo "$MOUNT_OUTPUT" | grep "mounted at" | sed 's/.*mounted at //')
-    if [ -z "$MOUNT_POINT" ]; then
-        # Try to find it by volume name
-        VOLUME_NAME=$(diskutil info "$SYSTEM_DISK" 2>/dev/null | grep "Volume Name" | sed 's/.*Volume Name: *//' | sed 's/[[:space:]]*$//')
-        if [ -n "$VOLUME_NAME" ]; then
-            MOUNT_POINT="/Volumes/$VOLUME_NAME"
-            log "Trying mount point from volume name: $MOUNT_POINT"
-        fi
-    fi
-fi
-
-# Manual check of /Volumes if we still don't have a mount point
-if [ -z "$MOUNT_POINT" ] || [ ! -d "$MOUNT_POINT" ]; then
-    log "Checking /Volumes for possible mount points:"
-    ls -la /Volumes/
-
-    # Look for any volume that has System/Library
-    for vol in /Volumes/*/; do
-        if [ -d "${vol}System/Library" ]; then
-            MOUNT_POINT="$vol"
-            log "✓ Found system files at: $MOUNT_POINT"
-            break
-        fi
-    done
-fi
-
-if [ -z "$MOUNT_POINT" ] || [ ! -d "$MOUNT_POINT" ]; then
-    log "✗ Could not find mount point for $SYSTEM_DISK"
-    log "Available volumes in /Volumes:"
-    ls -la /Volumes/ 2>/dev/null || echo "Could not list /Volumes"
-
-    # Try proceeding with root filesystem as last resort
-    if [ -d "/System/Library" ]; then
-        log "⚠ Using root filesystem as fallback"
-        MOUNT_POINT="/"
-    else
-        log "✗ No usable system volume found"
-        exit 1
-    fi
-fi
-
+# Clean up mount point path
+MOUNT_POINT=$(echo "$MOUNT_POINT" | sed 's|/$||')  # Remove trailing slash
 log "✓ Using mount point: $MOUNT_POINT"
 
 # Make it writable
+log "Making system volume writable..."
 if mount -uw "$MOUNT_POINT" 2>/dev/null; then
     log "✓ System volume mounted as writable"
 else
@@ -163,13 +256,21 @@ SYSTEM_ROOT="$MOUNT_POINT"
 # Verify we can see system files
 if [ -d "$SYSTEM_ROOT/System/Library" ]; then
     log "✓ System files found at $SYSTEM_ROOT"
-    log "✓ Found directories:"
-    ls -la "$SYSTEM_ROOT/" | head -10
+    log "System directory contents:"
+    ls -la "$SYSTEM_ROOT/" | head -5
 else
     log "✗ System files not found at $SYSTEM_ROOT"
     log "Contents of $SYSTEM_ROOT:"
-    ls -la "$SYSTEM_ROOT/"
-    exit 1
+    ls -la "$SYSTEM_ROOT/" || log "Could not list directory contents"
+
+    # Try fallback to root filesystem
+    if [ -d "/System/Library" ]; then
+        log "⚠ Using root filesystem as fallback"
+        SYSTEM_ROOT="/"
+    else
+        log "✗ No usable system volume found"
+        exit 1
+    fi
 fi
 
 # Step 3: Backup original files
@@ -180,10 +281,11 @@ mkdir -p "$BACKUP_DIR"
 # Backup Setup Assistant
 SETUP_ASSISTANT="$SYSTEM_ROOT/System/Library/CoreServices/Setup Assistant.app/Contents/MacOS/Setup Assistant"
 if [ -f "$SETUP_ASSISTANT" ]; then
-    cp "$SETUP_ASSISTANT" "$BACKUP_DIR/Setup_Assistant_original" 2>/dev/null || {
+    if cp "$SETUP_ASSISTANT" "$BACKUP_DIR/Setup_Assistant_original" 2>/dev/null; then
+        log "✓ Setup Assistant backed up"
+    else
         log "⚠ Could not backup Setup Assistant"
-    }
-    log "✓ Setup Assistant backed up"
+    fi
 else
     log "⚠ Setup Assistant not found at: $SETUP_ASSISTANT"
 fi
@@ -205,9 +307,11 @@ for plist in "${MDM_PLISTS[@]}"; do
     if [ -f "$plist" ]; then
         # Backup original
         plist_name=$(basename "$plist")
-        cp "$plist" "$BACKUP_DIR/$plist_name" 2>/dev/null || {
+        if cp "$plist" "$BACKUP_DIR/$plist_name" 2>/dev/null; then
+            log "Backed up $plist_name"
+        else
             log "⚠ Could not backup $plist_name"
-        }
+        fi
 
         # Rename to disable
         if mv "$plist" "${plist}.disabled" 2>/dev/null; then
@@ -222,8 +326,6 @@ done
 
 # Step 5: Modify Setup Assistant to remove ForceMDMEnroll
 log "Modifying Setup Assistant binary..."
-
-SETUP_ASSISTANT="$SYSTEM_ROOT/System/Library/CoreServices/Setup Assistant.app/Contents/MacOS/Setup Assistant"
 
 if [ -f "$SETUP_ASSISTANT" ]; then
     # Create a wrapper script that removes the ForceMDMEnroll flag
@@ -268,8 +370,11 @@ fi
 exec "$ORIGINAL_BINARY" "${ARGS[@]}"
 EOF
 
-        chmod +x "$SETUP_ASSISTANT" 2>/dev/null
-        log "✓ Setup Assistant modified to BLOCK execution when ForceMDMEnroll is detected"
+        if chmod +x "$SETUP_ASSISTANT" 2>/dev/null; then
+            log "✓ Setup Assistant modified to BLOCK execution when ForceMDMEnroll is detected"
+        else
+            log "✗ Could not set executable permissions on modified Setup Assistant"
+        fi
     else
         log "✗ Could not modify Setup Assistant (file may be protected)"
     fi
@@ -389,9 +494,9 @@ for pref_backup in "\$BACKUP_DIR"/com.apple.*.plist; do
 done
 
 # Restore managed preferences directory
-if [ -d "\$BACKUP_DIR/Managed Preferences" ]; then
+if [ -d "\$BACKUP_DIR/Managed_Preferences" ]; then
     mkdir -p "/Library/Managed Preferences"
-    cp -r "\$BACKUP_DIR/Managed Preferences/"* "/Library/Managed Preferences/" 2>/dev/null
+    cp -r "\$BACKUP_DIR/Managed_Preferences/"* "/Library/Managed Preferences/" 2>/dev/null
     echo "Restored Managed Preferences"
 fi
 
