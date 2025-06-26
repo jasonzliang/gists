@@ -133,18 +133,25 @@ if [ -f "$SETUP_ASSISTANT" ]; then
 
         cat > "$SETUP_ASSISTANT" << 'EOF'
 #!/bin/bash
-# Modified Setup Assistant that removes ForceMDMEnroll flag
+# Modified Setup Assistant that blocks ForceMDMEnroll
 ORIGINAL_BINARY="${0}.original"
 ARGS=()
+BLOCK_EXECUTION=false
 
-# Filter out MDM-related arguments
+# Check for MDM-related arguments
 for arg in "$@"; do
     case "$arg" in
         -ForceMDMEnroll|*ForceMDMEnroll*)
-            # Skip this argument
+            # Block execution entirely if ForceMDMEnroll is present
+            BLOCK_EXECUTION=true
+            echo "Setup Assistant blocked: ForceMDMEnroll detected"
+            echo "MDM enrollment has been disabled by system modification"
             ;;
         -MiniBuddyYes)
-            # Skip this argument too
+            # Also block on MiniBuddyYes (often used with forced enrollment)
+            BLOCK_EXECUTION=true
+            echo "Setup Assistant blocked: MiniBuddyYes detected"
+            echo "Automated setup has been disabled by system modification"
             ;;
         *)
             ARGS+=("$arg")
@@ -152,12 +159,19 @@ for arg in "$@"; do
     esac
 done
 
-# Execute original binary with filtered arguments
+# If blocking flags detected, exit without running Setup Assistant
+if [ "$BLOCK_EXECUTION" = true ]; then
+    echo "Setup Assistant execution blocked to prevent forced MDM enrollment"
+    echo "If you need to run setup manually, use: ${ORIGINAL_BINARY}.original"
+    exit 0
+fi
+
+# Execute original binary only if no blocking flags present
 exec "$ORIGINAL_BINARY" "${ARGS[@]}"
 EOF
 
         chmod +x "$SETUP_ASSISTANT" 2>/dev/null
-        log "✓ Setup Assistant modified to skip MDM enrollment"
+        log "✓ Setup Assistant modified to BLOCK execution when ForceMDMEnroll is detected"
     else
         log "✗ Could not modify Setup Assistant (file may be protected)"
     fi
@@ -293,7 +307,7 @@ chmod +x "$BACKUP_DIR/restore_mdm.sh"
 log "=== MDM Removal Complete ==="
 log "✓ System Integrity Protection disabled"
 log "✓ MDM launch daemons disabled"
-log "✓ Setup Assistant modified to skip forced enrollment"
+log "✓ Setup Assistant modified to block forced enrollment execution"
 log "✓ Configuration profiles removed"
 log "✓ Backup created at: $BACKUP_DIR"
 log ""
