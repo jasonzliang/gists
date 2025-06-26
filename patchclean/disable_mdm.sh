@@ -88,35 +88,67 @@ log "Using system disk: $SYSTEM_DISK"
 
 # Mount the disk
 log "Mounting $SYSTEM_DISK..."
-MOUNT_OUTPUT=$(diskutil mount "$SYSTEM_DISK" 2>&1)
+
+# Try mounting with timeout
+if timeout 30 diskutil mount "$SYSTEM_DISK" >/tmp/mount_output 2>&1; then
+    MOUNT_OUTPUT=$(cat /tmp/mount_output)
+    log "✓ Mount completed"
+else
+    log "Mount command timed out or failed. Checking if already mounted..."
+    MOUNT_OUTPUT=$(cat /tmp/mount_output 2>/dev/null || echo "No output")
+fi
+
 log "Mount output: $MOUNT_OUTPUT"
 
-# Find where it mounted
-MOUNT_POINT=$(echo "$MOUNT_OUTPUT" | grep "mounted at" | sed 's/.*mounted at //')
-if [ -z "$MOUNT_POINT" ]; then
-    # Try to find it in /Volumes
-    VOLUME_NAME=$(diskutil info "$SYSTEM_DISK" 2>/dev/null | grep "Volume Name" | sed 's/.*Volume Name: *//')
-    if [ -n "$VOLUME_NAME" ]; then
-        MOUNT_POINT="/Volumes/$VOLUME_NAME"
-    else
-        # Last resort - check common mount points
-        for mp in "/Volumes/Macintosh HD" "/Volumes/System" "/Volumes/macOS" "/"; do
-            if [ -d "$mp/System/Library" ]; then
-                MOUNT_POINT="$mp"
-                break
-            fi
-        done
+# Check if it's already mounted by looking at diskutil list
+ALREADY_MOUNTED=$(diskutil list | grep "$SYSTEM_DISK" | grep -o "/Volumes/[^[:space:]]*")
+if [ -n "$ALREADY_MOUNTED" ]; then
+    MOUNT_POINT="$ALREADY_MOUNTED"
+    log "✓ Volume already mounted at: $MOUNT_POINT"
+else
+    # Find where it mounted from the mount output
+    MOUNT_POINT=$(echo "$MOUNT_OUTPUT" | grep "mounted at" | sed 's/.*mounted at //')
+    if [ -z "$MOUNT_POINT" ]; then
+        # Try to find it by volume name
+        VOLUME_NAME=$(diskutil info "$SYSTEM_DISK" 2>/dev/null | grep "Volume Name" | sed 's/.*Volume Name: *//' | sed 's/[[:space:]]*$//')
+        if [ -n "$VOLUME_NAME" ]; then
+            MOUNT_POINT="/Volumes/$VOLUME_NAME"
+            log "Trying mount point from volume name: $MOUNT_POINT"
+        fi
     fi
 fi
 
+# Manual check of /Volumes if we still don't have a mount point
 if [ -z "$MOUNT_POINT" ] || [ ! -d "$MOUNT_POINT" ]; then
-    log "✗ Could not determine mount point for $SYSTEM_DISK"
-    log "Checking /Volumes:"
+    log "Checking /Volumes for possible mount points:"
     ls -la /Volumes/
-    exit 1
+
+    # Look for any volume that has System/Library
+    for vol in /Volumes/*/; do
+        if [ -d "${vol}System/Library" ]; then
+            MOUNT_POINT="$vol"
+            log "✓ Found system files at: $MOUNT_POINT"
+            break
+        fi
+    done
 fi
 
-log "✓ Volume mounted at: $MOUNT_POINT"
+if [ -z "$MOUNT_POINT" ] || [ ! -d "$MOUNT_POINT" ]; then
+    log "✗ Could not find mount point for $SYSTEM_DISK"
+    log "Available volumes in /Volumes:"
+    ls -la /Volumes/ 2>/dev/null || echo "Could not list /Volumes"
+
+    # Try proceeding with root filesystem as last resort
+    if [ -d "/System/Library" ]; then
+        log "⚠ Using root filesystem as fallback"
+        MOUNT_POINT="/"
+    else
+        log "✗ No usable system volume found"
+        exit 1
+    fi
+fi
+
+log "✓ Using mount point: $MOUNT_POINT"
 
 # Make it writable
 if mount -uw "$MOUNT_POINT" 2>/dev/null; then
