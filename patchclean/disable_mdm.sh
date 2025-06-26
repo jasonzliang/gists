@@ -46,33 +46,46 @@ fi
 # Step 2: Mount the system volume as writable
 log "Mounting system volume as writable..."
 
-# Find the actual system volume
-SYSTEM_VOLUME=$(diskutil list | grep -E "Apple_APFS.*Macintosh HD" | awk '{print $NF}' | head -1)
-if [ -z "$SYSTEM_VOLUME" ]; then
-    # Try to find any APFS system volume
-    SYSTEM_VOLUME=$(diskutil list | grep "Apple_APFS" | grep -E "(System|Macintosh)" | awk '{print $NF}' | head -1)
-fi
-if [ -z "$SYSTEM_VOLUME" ]; then
-    # Try common defaults
-    for dev in /dev/disk1s1 /dev/disk1s5 /dev/disk2s1; do
-        if [ -b "$dev" ]; then
-            SYSTEM_VOLUME="$dev"
+# In Recovery Mode, we need to find and mount the actual system volume
+SYSTEM_VOLUME_NAME="Macintosh HD"
+SYSTEM_MOUNT_POINT="/Volumes/$SYSTEM_VOLUME_NAME"
+
+# Find the system volume
+SYSTEM_DISK=$(diskutil list | grep "Apple_APFS.*$SYSTEM_VOLUME_NAME" | awk '{print $NF}' | head -1)
+if [ -z "$SYSTEM_DISK" ]; then
+    # Try alternative names
+    for name in "Macintosh HD" "System" "macOS"; do
+        SYSTEM_DISK=$(diskutil list | grep "Apple_APFS.*$name" | awk '{print $NF}' | head -1)
+        if [ -n "$SYSTEM_DISK" ]; then
+            SYSTEM_VOLUME_NAME="$name"
+            SYSTEM_MOUNT_POINT="/Volumes/$name"
             break
         fi
     done
 fi
 
-log "Attempting to mount system volume: $SYSTEM_VOLUME"
-
-# Try different mount approaches
-if mount -uw / 2>/dev/null; then
-    log "✓ Root filesystem mounted as writable"
-elif [ -n "$SYSTEM_VOLUME" ] && mount -uw "$SYSTEM_VOLUME" 2>/dev/null; then
-    log "✓ System volume $SYSTEM_VOLUME mounted as writable"
-else
-    log "⚠ Warning: Could not mount as writable. Some operations may fail."
-    log "Continuing anyway..."
+if [ -z "$SYSTEM_DISK" ]; then
+    log "✗ Could not find system volume. Available volumes:"
+    diskutil list | grep "Apple_APFS"
+    exit 1
 fi
+
+log "Found system disk: $SYSTEM_DISK"
+
+# Mount the system volume if not already mounted
+if [ ! -d "$SYSTEM_MOUNT_POINT" ]; then
+    diskutil mount "$SYSTEM_DISK"
+fi
+
+# Make it writable
+if mount -uw "$SYSTEM_MOUNT_POINT" 2>/dev/null; then
+    log "✓ System volume mounted as writable at $SYSTEM_MOUNT_POINT"
+else
+    log "⚠ Warning: Could not mount $SYSTEM_MOUNT_POINT as writable. Some operations may fail."
+fi
+
+# Update paths to use the mounted volume
+SYSTEM_ROOT="$SYSTEM_MOUNT_POINT"
 
 # Step 3: Backup original files
 log "Creating backup directory..."
@@ -80,27 +93,27 @@ BACKUP_DIR="/tmp/mdm_backup_$(date +%Y%m%d_%H%M%S)"
 mkdir -p "$BACKUP_DIR"
 
 # Backup Setup Assistant
-SETUP_ASSISTANT="/System/Library/CoreServices/Setup Assistant.app/Contents/MacOS/Setup Assistant"
+SETUP_ASSISTANT="$SYSTEM_ROOT/System/Library/CoreServices/Setup Assistant.app/Contents/MacOS/Setup Assistant"
 if [ -f "$SETUP_ASSISTANT" ]; then
     cp "$SETUP_ASSISTANT" "$BACKUP_DIR/Setup_Assistant_original" 2>/dev/null || {
         log "⚠ Could not backup Setup Assistant"
     }
     log "✓ Setup Assistant backed up"
 else
-    log "⚠ Setup Assistant not found at expected location"
+    log "⚠ Setup Assistant not found at: $SETUP_ASSISTANT"
 fi
 
 # Step 4: Disable MDM launch daemons
 log "Disabling MDM launch daemons..."
 
 MDM_PLISTS=(
-    "/System/Library/LaunchDaemons/com.apple.ManagedClient.enroll.plist"
-    "/System/Library/LaunchDaemons/com.apple.ManagedClient.plist"
-    "/System/Library/LaunchDaemons/com.apple.mdmclient.daemon.runatboot.plist"
-    "/System/Library/LaunchDaemons/com.apple.mdmclient.daemon.plist"
-    "/System/Library/LaunchDaemons/com.apple.mbsystemadministration.plist"
-    "/System/Library/LaunchDaemons/com.apple.mbusertrampoline.plist"
-    "/System/Library/LaunchDaemons/com.apple.betaenrollmentd.plist"
+    "$SYSTEM_ROOT/System/Library/LaunchDaemons/com.apple.ManagedClient.enroll.plist"
+    "$SYSTEM_ROOT/System/Library/LaunchDaemons/com.apple.ManagedClient.plist"
+    "$SYSTEM_ROOT/System/Library/LaunchDaemons/com.apple.mdmclient.daemon.runatboot.plist"
+    "$SYSTEM_ROOT/System/Library/LaunchDaemons/com.apple.mdmclient.daemon.plist"
+    "$SYSTEM_ROOT/System/Library/LaunchDaemons/com.apple.mbsystemadministration.plist"
+    "$SYSTEM_ROOT/System/Library/LaunchDaemons/com.apple.mbusertrampoline.plist"
+    "$SYSTEM_ROOT/System/Library/LaunchDaemons/com.apple.betaenrollmentd.plist"
 )
 
 for plist in "${MDM_PLISTS[@]}"; do
@@ -125,7 +138,7 @@ done
 # Step 5: Modify Setup Assistant to remove ForceMDMEnroll
 log "Modifying Setup Assistant binary..."
 
-SETUP_ASSISTANT="/System/Library/CoreServices/Setup Assistant.app/Contents/MacOS/Setup Assistant"
+SETUP_ASSISTANT="$SYSTEM_ROOT/System/Library/CoreServices/Setup Assistant.app/Contents/MacOS/Setup Assistant"
 
 if [ -f "$SETUP_ASSISTANT" ]; then
     # Create a wrapper script that removes the ForceMDMEnroll flag
@@ -181,7 +194,7 @@ fi
 
 # Step 6: Remove MDM configuration profiles
 log "Removing MDM configuration profiles..."
-PROFILES_DIR="/var/db/ConfigurationProfiles"
+PROFILES_DIR="$SYSTEM_ROOT/var/db/ConfigurationProfiles"
 if [ -d "$PROFILES_DIR" ]; then
     # Backup profiles
     if cp -r "$PROFILES_DIR" "$BACKUP_DIR/ConfigurationProfiles" 2>/dev/null; then
@@ -201,15 +214,15 @@ if [ -d "$PROFILES_DIR" ]; then
     done
     log "✓ Removed $removed_count configuration profiles"
 else
-    log "⚠ Configuration profiles directory not found"
+    log "⚠ Configuration profiles directory not found at: $PROFILES_DIR"
 fi
 
 # Step 7: Clear MDM-related preferences
 log "Clearing MDM preferences..."
 MDM_PREFS=(
-    "/Library/Preferences/com.apple.mdmclient.plist"
-    "/Library/Preferences/com.apple.ManagedClient.plist"
-    "/Library/Managed Preferences"
+    "$SYSTEM_ROOT/Library/Preferences/com.apple.mdmclient.plist"
+    "$SYSTEM_ROOT/Library/Preferences/com.apple.ManagedClient.plist"
+    "$SYSTEM_ROOT/Library/Managed Preferences"
 )
 
 for pref in "${MDM_PREFS[@]}"; do
@@ -264,11 +277,11 @@ done
 
 # Restore Setup Assistant
 if [ -f "\$BACKUP_DIR/Setup_Assistant_original" ]; then
-    cp "\$BACKUP_DIR/Setup_Assistant_original" "/System/Library/CoreServices/Setup Assistant.app/Contents/MacOS/Setup Assistant"
-    chmod +x "/System/Library/CoreServices/Setup Assistant.app/Contents/MacOS/Setup Assistant"
+    cp "\$BACKUP_DIR/Setup_Assistant_original" "$SYSTEM_ROOT/System/Library/CoreServices/Setup Assistant.app/Contents/MacOS/Setup Assistant"
+    chmod +x "$SYSTEM_ROOT/System/Library/CoreServices/Setup Assistant.app/Contents/MacOS/Setup Assistant"
 
     # Remove our wrapper files
-    rm -f "/System/Library/CoreServices/Setup Assistant.app/Contents/MacOS/Setup Assistant.original"
+    rm -f "$SYSTEM_ROOT/System/Library/CoreServices/Setup Assistant.app/Contents/MacOS/Setup Assistant.original"
 
     echo "Restored Setup Assistant"
 fi
