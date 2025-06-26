@@ -47,34 +47,78 @@ fi
 log "Mounting system volume as writable..."
 
 # In Recovery Mode, we need to find and mount the actual system volume
-SYSTEM_VOLUME_NAME="Macintosh HD"
-SYSTEM_MOUNT_POINT="/Volumes/$SYSTEM_VOLUME_NAME"
+# First, let's see what volumes are available
+log "Available APFS volumes:"
+diskutil list | grep "Apple_APFS"
 
-# Find the system volume
-SYSTEM_DISK=$(diskutil list | grep "Apple_APFS.*$SYSTEM_VOLUME_NAME" | awk '{print $NF}' | head -1)
+# Try to find the system volume by size (largest APFS volume is usually the system)
+SYSTEM_DISK=$(diskutil list | grep "Apple_APFS" | awk '{
+    # Extract size and convert to bytes for comparison
+    size = $2
+    if (size ~ /TB/) {
+        gsub(/TB/, "", size)
+        size = size * 1000000000000
+    } else if (size ~ /GB/) {
+        gsub(/GB/, "", size)
+        size = size * 1000000000
+    } else if (size ~ /MB/) {
+        gsub(/MB/, "", size)
+        size = size * 1000000
+    }
+    if (size > max_size) {
+        max_size = size
+        max_disk = $NF
+    }
+} END { print max_disk }')
+
+# If that fails, try common names
 if [ -z "$SYSTEM_DISK" ]; then
-    # Try alternative names
-    for name in "Macintosh HD" "System" "macOS"; do
-        SYSTEM_DISK=$(diskutil list | grep "Apple_APFS.*$name" | awk '{print $NF}' | head -1)
+    for name in "Macintosh HD" "System" "macOS" "disk0s2"; do
+        SYSTEM_DISK=$(diskutil list | grep "Apple_APFS" | grep "$name" | awk '{print $NF}' | head -1)
         if [ -n "$SYSTEM_DISK" ]; then
-            SYSTEM_VOLUME_NAME="$name"
-            SYSTEM_MOUNT_POINT="/Volumes/$name"
+            log "Found system disk by name: $SYSTEM_DISK"
             break
         fi
     done
 fi
 
+# If still not found, let user choose
 if [ -z "$SYSTEM_DISK" ]; then
-    log "✗ Could not find system volume. Available volumes:"
-    diskutil list | grep "Apple_APFS"
+    log "Could not automatically detect system volume. Please specify:"
+    diskutil list | grep "Apple_APFS" | nl -nln
+    echo "Enter the disk identifier (e.g., disk0s2): "
+    read SYSTEM_DISK
+fi
+
+if [ -z "$SYSTEM_DISK" ]; then
+    log "✗ No system volume specified. Exiting."
     exit 1
 fi
 
-log "Found system disk: $SYSTEM_DISK"
+log "Using system disk: $SYSTEM_DISK"
+
+# Get the volume name for mounting
+VOLUME_NAME=$(diskutil info "$SYSTEM_DISK" | grep "Volume Name" | awk -F: '{print $2}' | sed 's/^ *//')
+if [ -z "$VOLUME_NAME" ]; then
+    VOLUME_NAME="Unknown Volume"
+fi
+
+SYSTEM_MOUNT_POINT="/Volumes/$VOLUME_NAME"
+
+log "Volume name: $VOLUME_NAME"
+log "Mount point: $SYSTEM_MOUNT_POINT"
 
 # Mount the system volume if not already mounted
 if [ ! -d "$SYSTEM_MOUNT_POINT" ]; then
+    log "Mounting $SYSTEM_DISK..."
     diskutil mount "$SYSTEM_DISK"
+    sleep 2  # Give it time to mount
+fi
+
+# Verify mount point exists
+if [ ! -d "$SYSTEM_MOUNT_POINT" ]; then
+    log "✗ Failed to mount system volume at $SYSTEM_MOUNT_POINT"
+    exit 1
 fi
 
 # Make it writable
@@ -86,6 +130,15 @@ fi
 
 # Update paths to use the mounted volume
 SYSTEM_ROOT="$SYSTEM_MOUNT_POINT"
+
+# Verify we can see system files
+if [ -d "$SYSTEM_ROOT/System/Library" ]; then
+    log "✓ System files found at $SYSTEM_ROOT"
+else
+    log "✗ System files not found at $SYSTEM_ROOT. Wrong volume?"
+    ls -la "$SYSTEM_ROOT/"
+    exit 1
+fi
 
 # Step 3: Backup original files
 log "Creating backup directory..."
