@@ -123,10 +123,12 @@ log "✓ Created process monitor"
 launchctl load /Library/LaunchDaemons/com.mdm.blocker.plist 2>/dev/null || true
 log "✓ Loaded MDM blocker daemon"
 
-# Create a second approach using a shell alias/function for interactive shells
-cat > /etc/profile.d/mdm_blocker.sh << 'EOF'
-# MDM Setup Assistant blocker
+# Create shell environment protection using macOS standard locations
+# Add to /etc/zshrc for zsh (default shell in macOS)
+if ! grep -q "MDM Setup Assistant blocker" /etc/zshrc 2>/dev/null; then
+    cat >> /etc/zshrc << 'EOF'
 
+# MDM Setup Assistant blocker
 setup_assistant_safe() {
     local has_minibuddy=false
     local has_force_mdm=false
@@ -151,9 +153,40 @@ if [ -d "/usr/local/bin" ]; then
     export PATH="/usr/local/bin:$PATH"
 fi
 EOF
+    log "✓ Added zsh environment blocker"
+fi
 
-chmod +x /etc/profile.d/mdm_blocker.sh
-log "✓ Created shell environment blocker"
+# Also add to /etc/bashrc for bash users
+if ! grep -q "MDM Setup Assistant blocker" /etc/bashrc 2>/dev/null; then
+    cat >> /etc/bashrc << 'EOF'
+
+# MDM Setup Assistant blocker
+setup_assistant_safe() {
+    local has_minibuddy=false
+    local has_force_mdm=false
+
+    for arg in "$@"; do
+        case "$arg" in
+            -MiniBuddyYes) has_minibuddy=true ;;
+            -ForceMDMEnroll) has_force_mdm=true ;;
+        esac
+    done
+
+    if [ "$has_minibuddy" = true ] && [ "$has_force_mdm" = true ]; then
+        echo "Setup Assistant blocked: Forced MDM enrollment detected"
+        return 0
+    fi
+
+    "/System/Library/CoreServices/Setup Assistant.app/Contents/MacOS/Setup Assistant" "$@"
+}
+
+# Override Setup Assistant path in PATH
+if [ -d "/usr/local/bin" ]; then
+    export PATH="/usr/local/bin:$PATH"
+fi
+EOF
+    log "✓ Added bash environment blocker"
+fi
 
 # Create symlink to intercept direct calls
 ln -sf /usr/local/bin/setup_assistant_wrapper "/usr/local/bin/Setup Assistant" 2>/dev/null || true
@@ -169,11 +202,14 @@ echo "Removing MDM blocker..."
 launchctl unload /Library/LaunchDaemons/com.mdm.blocker.plist 2>/dev/null || true
 rm -f /Library/LaunchDaemons/com.mdm.blocker.plist
 
-# Remove scripts
+# Remove scripts and shell configurations
 rm -f /usr/local/bin/setup_assistant_wrapper
 rm -f /usr/local/bin/mdm_process_monitor
 rm -f /usr/local/bin/Setup\ Assistant
-rm -f /etc/profile.d/mdm_blocker.sh
+
+# Remove from shell config files
+sed -i '' '/# MDM Setup Assistant blocker/,/^$/d' /etc/zshrc 2>/dev/null || true
+sed -i '' '/# MDM Setup Assistant blocker/,/^$/d' /etc/bashrc 2>/dev/null || true
 
 # Remove this script itself
 rm -f /usr/local/bin/remove_mdm_blocker
