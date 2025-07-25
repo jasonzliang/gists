@@ -56,14 +56,23 @@ is_running() {
     esac
 }
 
-# Setup alias in .ashrc
+# Setup alias in .ashrc and ensure .profile sources .ashrc
 setup_alias() {
     local ashrc="/root/.ashrc"
+    local profile="/root/.profile"
     local alias_line="alias exitnode=\"$TARGET_PATH check\""
+    local source_line="[ -f ~/.ashrc ] && . ~/.ashrc"
 
+    # Add alias to .ashrc
     if [ ! -f "$ashrc" ] || ! grep -qF "alias exitnode=" "$ashrc"; then
         echo "$alias_line" >> "$ashrc"
         log "Added exitnode alias to $ashrc"
+    fi
+
+    # Ensure .profile sources .ashrc
+    if [ ! -f "$profile" ] || ! grep -qF ". ~/.ashrc" "$profile"; then
+        echo "$source_line" >> "$profile"
+        log "Added .ashrc sourcing to $profile"
     fi
 }
 
