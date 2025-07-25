@@ -162,7 +162,7 @@ setup_boot() {
     ensure_file /etc/rc.local "#!/bin/sh\n# Put your custom commands here\nexit 0" +x
     grep -qF "$TARGET_PATH" /etc/rc.local || \
         sed -i "\|exit 0|i\\
-$TARGET_PATH check &" /etc/rc.local
+(sleep 30 && $TARGET_PATH check) &" /etc/rc.local
 }
 
 # Setup upgrade preservation
