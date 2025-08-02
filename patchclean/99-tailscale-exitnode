@@ -1,36 +1,27 @@
-#!/bin/sh /etc/rc.common
-# Tailscale Exit Node Auto-Configuration Init Script
+#!/bin/ash
+# Tailscale Exit Node Auto-Configuration Script
 #
 # This script automatically configures and monitors a Tailscale exit node on OpenWrt.
 # Features:
-# - Proper OpenWrt init script with start/stop/restart functionality
+# - Auto-installs itself to /etc/init.d/ for persistence across upgrades
 # - Interactive subnet route configuration with sensible defaults
 # - Sets up hourly monitoring via cron to ensure exit node stays enabled
+# - Configures boot-time execution to handle reboots
 # - Manages Tailscale service startup and connection verification
-# - Preserves configuration across reboots and upgrades
-#
-# Installation:
-#   cp script.sh /etc/init.d/tailscale-exitnode
-#   chmod +x /etc/init.d/tailscale-exitnode
-#   /etc/init.d/tailscale-exitnode enable
 #
 # Usage:
-#   /etc/init.d/tailscale-exitnode start     # Start and configure exit node
-#   /etc/init.d/tailscale-exitnode stop      # Stop exit node
-#   /etc/init.d/tailscale-exitnode restart   # Restart exit node
-#   /etc/init.d/tailscale-exitnode check     # Check/enable exit node status
-#   /etc/init.d/tailscale-exitnode routes    # Show current route configuration
-#   /etc/init.d/tailscale-exitnode reconfigure # Reconfigure advertised routes
-#   /etc/init.d/tailscale-exitnode setup     # Interactive setup
+#   ./script.sh           # Full interactive setup (default)
+#   ./script.sh install   # Force installation only
+#   ./script.sh check     # Check/enable exit node status
+#   ./script.sh routes    # Show current route configuration
+#   ./script.sh reconfigure # Reconfigure advertised routes
+#
+# The script preserves itself during sysupgrade and runs automatically after
+# installation to maintain exit node functionality without manual intervention.
 
-START=99
-STOP=10
-USE_PROCD=1
-
-SCRIPT_NAME="tailscale-exitnode"
-SCRIPT_PATH="/etc/init.d/$SCRIPT_NAME"
+SCRIPT_NAME="99-tailscale-exitnode"
+TARGET_PATH="/etc/init.d/$SCRIPT_NAME"
 ROUTES_FILE="/etc/tailscale-custom-routes"
-PIDFILE="/var/run/tailscale-exitnode.pid"
 DEFAULT_ROUTES="0.0.0.0/0,::/0"
 
 # Logging helper
@@ -39,8 +30,9 @@ log() { logger -t tailscale_exitnode "$1"; }
 # File operations helper
 ensure_file() {
     local file="$1" content="$2" mode="$3"
+    # More atomic file creation
     if [ ! -f "$file" ]; then
-        local temp_file="${file}.tmp.$$"
+        local temp_file="${file}.tmp.$"
         if printf "$content" > "$temp_file" && mv "$temp_file" "$file"; then
             [ "$mode" ] && chmod "$mode" "$file"
         else
@@ -60,7 +52,6 @@ manage_service() {
 is_running() {
     case "$1" in
         cron) pgrep -x crond >/dev/null || pgrep -x cron >/dev/null ;;
-        tailscaled) pgrep tailscaled >/dev/null ;;
         *) pgrep "$1" >/dev/null ;;
     esac
 }
@@ -69,7 +60,7 @@ is_running() {
 setup_alias() {
     local ashrc="/root/.ashrc"
     local profile="/root/.profile"
-    local alias_line="alias exitnode=\"$SCRIPT_PATH check\""
+    local alias_line="alias exitnode=\"$TARGET_PATH check\""
     local source_line="[ -f ~/.ashrc ] && . ~/.ashrc"
 
     # Add alias to .ashrc
@@ -85,6 +76,30 @@ setup_alias() {
     fi
 }
 
+# Self-install if not in target location
+self_install() {
+    [ "$0" = "$TARGET_PATH" ] && return 0
+
+    mkdir -p "$(dirname "$TARGET_PATH")"
+
+    # Check if target already exists and warn about overwrite
+    if [ -f "$TARGET_PATH" ]; then
+        log "Overwriting existing script at $TARGET_PATH"
+        echo "⚠ Overwriting existing installation at $TARGET_PATH"
+    fi
+
+    if cp "$0" "$TARGET_PATH" && chmod +x "$TARGET_PATH"; then
+        log "Script installed to $TARGET_PATH"
+        echo "✓ Installed to $TARGET_PATH"
+        "$TARGET_PATH" && echo "✓ Setup completed"
+        return 0
+    else
+        log "Installation failed"
+        echo "✗ Installation failed"
+        return 1
+    fi
+}
+
 # Interactive route configuration
 configure_routes() {
     cat <<'EOF'
@@ -96,6 +111,7 @@ Do you want to advertise additional subnet routes? (y/N)
 EOF
     printf "Choice: "; read -r choice
 
+    # Clearer logic
     case "${choice:-n}" in
         [Yy]*)
             cat <<'EOF'
@@ -117,7 +133,7 @@ EOF
 
 # Setup cron with service check
 setup_cron() {
-    # Enable cron service
+    # Enable cron service (with error handling)
     if [ -x /etc/init.d/cron ]; then
         manage_service cron enabled || manage_service cron enable
         is_running "cron" || manage_service cron start
@@ -126,16 +142,17 @@ setup_cron() {
         return 1
     fi
 
-    # Add cron job if not exists
+    # Add cron job if not exists (with safe crontab handling)
     local current_cron temp_cron
     current_cron=$(crontab -l 2>/dev/null || true)
 
-    if ! echo "$current_cron" | grep -qF "$SCRIPT_PATH check"; then
-        temp_cron="/tmp/crontab.$$"
+    if ! echo "$current_cron" | grep -qF "$TARGET_PATH check"; then
+        # Use /tmp with PID for temp file (more portable than mktemp)
+        temp_cron="/tmp/crontab.$"
         {
             echo "$current_cron"
             echo "# Tailscale exit node check"
-            echo "0 * * * * $SCRIPT_PATH check"
+            echo "0 * * * * $TARGET_PATH check"
         } > "$temp_cron"
 
         if crontab "$temp_cron"; then
@@ -149,6 +166,14 @@ setup_cron() {
     fi
 }
 
+# Setup boot execution
+setup_boot() {
+    ensure_file /etc/rc.local "#!/bin/sh\n# Put your custom commands here\nexit 0" +x
+    grep -qF "$TARGET_PATH" /etc/rc.local || \
+        sed -i "\|exit 0|i\\
+(sleep 30 && $TARGET_PATH check) &" /etc/rc.local
+}
+
 # Setup upgrade preservation
 setup_preservation() {
     local conf_file
@@ -159,10 +184,7 @@ setup_preservation() {
     fi
 
     [ "$conf_file" ] && {
-        # Preserve the script, routes file, and alias files
-        for file in "$SCRIPT_PATH" "$ROUTES_FILE" "/root/.ashrc" "/root/.profile"; do
-            grep -q "^$file$" "$conf_file" 2>/dev/null || echo "$file" >> "$conf_file"
-        done
+        grep -q "^$TARGET_PATH$" "$conf_file" 2>/dev/null || echo "$TARGET_PATH" >> "$conf_file"
     }
 }
 
@@ -172,7 +194,6 @@ check_tailscale() {
     command -v tailscale >/dev/null || { log "Tailscale not installed"; return 1; }
     command -v jsonfilter >/dev/null || { log "jsonfilter not available"; return 1; }
 
-    # Start tailscale service if not running
     if ! is_running tailscaled; then
         log "Starting Tailscale daemon"
         manage_service tailscale start
@@ -186,7 +207,7 @@ check_tailscale() {
 
     if [ "$exitnode_enabled" != "true" ]; then
         routes=$([ -f "$ROUTES_FILE" ] && cat "$ROUTES_FILE" || echo "$DEFAULT_ROUTES")
-        # Validate routes format
+        # Validate routes format (basic check - no spaces or invalid chars)
         case "$routes" in
             *[!0-9./,:]*) log "Invalid routes format: $routes"; return 1 ;;
             *\ *) log "Routes cannot contain spaces: $routes"; return 1 ;;
@@ -197,99 +218,34 @@ check_tailscale() {
     else
         log "Exit node already enabled"
     fi
-
-    # Create pidfile to indicate service is running
-    echo $$ > "$PIDFILE"
 }
 
-# OpenWrt init script functions
-start_service() {
-    log "Starting Tailscale exit node service"
+# Main execution
+case "${1:-setup}" in
+    check)
+        check_tailscale ;;
+    install)
+        self_install ;;
+    reconfigure)
+        configure_routes
+        echo "Routes reconfigured. Run '$0 check' to apply" ;;
+    routes)
+        echo "Current routes: $([ -f "$ROUTES_FILE" ] && cat "$ROUTES_FILE" || echo "$DEFAULT_ROUTES")" ;;
+    setup|*)
+        # Auto-install if needed
+        if [ "$(basename "$0")" != "$SCRIPT_NAME" ] || [ "$(dirname "$0")" != "/etc/init.d" ]; then
+            self_install; exit $?
+        fi
 
-    # Ensure routes file exists with defaults
-    [ ! -f "$ROUTES_FILE" ] && echo "$DEFAULT_ROUTES" > "$ROUTES_FILE"
+        # Full setup
+        echo "=== Tailscale Exit Node Setup ==="
+        configure_routes
+        setup_boot
+        setup_cron
+        setup_preservation
+        setup_alias
+        check_tailscale
 
-    # Configure and start exit node
-    check_tailscale
-
-    # Use procd to monitor the service
-    procd_open_instance
-    procd_set_param command /bin/sh -c "while [ -f '$PIDFILE' ]; do sleep 300; $SCRIPT_PATH check; done"
-    procd_set_param pidfile "$PIDFILE"
-    procd_set_param respawn ${respawn_threshold:-3600} ${respawn_timeout:-5} ${respawn_retry:-5}
-    procd_close_instance
-}
-
-stop_service() {
-    log "Stopping Tailscale exit node service"
-
-    # Remove pidfile to stop monitoring loop
-    rm -f "$PIDFILE"
-
-    # Optionally disconnect tailscale (uncomment if desired)
-    # tailscale down
-}
-
-restart() {
-    stop
-    sleep 2
-    start
-}
-
-# Additional commands
-check() {
-    check_tailscale
-}
-
-reconfigure() {
-    configure_routes
-    echo "Routes reconfigured. Run '/etc/init.d/$SCRIPT_NAME restart' to apply"
-}
-
-routes() {
-    echo "Current routes: $([ -f "$ROUTES_FILE" ] && cat "$ROUTES_FILE" || echo "$DEFAULT_ROUTES")"
-}
-
-setup() {
-    echo "=== Tailscale Exit Node Setup ==="
-
-    # Check if already enabled
-    if [ -f /etc/rc.d/S${START}${SCRIPT_NAME} ]; then
-        echo "✓ Service already enabled"
-    else
-        echo "Enabling service..."
-        "$SCRIPT_PATH" enable
-    fi
-
-    configure_routes
-    setup_cron
-    setup_preservation
-    setup_alias
-
-    echo "✓ Setup completed"
-    echo ""
-    echo "Usage:"
-    echo "  /etc/init.d/$SCRIPT_NAME start     # Start exit node"
-    echo "  /etc/init.d/$SCRIPT_NAME stop      # Stop exit node"
-    echo "  /etc/init.d/$SCRIPT_NAME restart   # Restart exit node"
-    echo "  /etc/init.d/$SCRIPT_NAME check     # Check status"
-    echo "  exitnode                           # Alias for check command"
-    echo ""
-    echo "Starting service..."
-    "$SCRIPT_PATH" start
-}
-
-# Handle additional commands
-EXTRA_COMMANDS="check reconfigure routes setup"
-EXTRA_HELP="        check           Check and enable exit node if needed
-        reconfigure     Reconfigure advertised routes
-        routes          Show current route configuration
-        setup           Interactive setup and configuration"
-
-# Route commands to appropriate functions
-case "$1" in
-    check) check ;;
-    reconfigure) reconfigure ;;
-    routes) routes ;;
-    setup) setup ;;
+        # Return 1 to persist script through upgrades
+        exit 1 ;;
 esac
