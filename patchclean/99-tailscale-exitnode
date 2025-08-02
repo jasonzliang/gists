@@ -19,7 +19,7 @@
 # The script preserves itself during sysupgrade and runs automatically after
 # installation to maintain exit node functionality without manual intervention.
 
-SCRIPT_NAME="99-tailscale-exitnode"
+SCRIPT_NAME="tailscale-exitnode"
 TARGET_PATH="/etc/init.d/$SCRIPT_NAME"
 ROUTES_FILE="/etc/tailscale-custom-routes"
 DEFAULT_ROUTES="0.0.0.0/0,::/0"
@@ -32,7 +32,7 @@ ensure_file() {
     local file="$1" content="$2" mode="$3"
     # More atomic file creation
     if [ ! -f "$file" ]; then
-        local temp_file="${file}.tmp.$"
+        local temp_file="${file}.tmp.$$"
         if printf "$content" > "$temp_file" && mv "$temp_file" "$file"; then
             [ "$mode" ] && chmod "$mode" "$file"
         else
@@ -111,6 +111,12 @@ Do you want to advertise additional subnet routes? (y/N)
 EOF
     printf "Choice: "; read -r choice
 
+    # Remove existing routes file if it exists to ensure clean configuration
+    [ -f "$ROUTES_FILE" ] && {
+        log "Removing existing routes file: $ROUTES_FILE"
+        rm -f "$ROUTES_FILE"
+    }
+
     # Clearer logic
     case "${choice:-n}" in
         [Yy]*)
@@ -148,7 +154,7 @@ setup_cron() {
 
     if ! echo "$current_cron" | grep -qF "$TARGET_PATH check"; then
         # Use /tmp with PID for temp file (more portable than mktemp)
-        temp_cron="/tmp/crontab.$"
+        temp_cron="/tmp/crontab.$$"
         {
             echo "$current_cron"
             echo "# Tailscale exit node check"
@@ -185,6 +191,8 @@ setup_preservation() {
 
     [ "$conf_file" ] && {
         grep -q "^$TARGET_PATH$" "$conf_file" 2>/dev/null || echo "$TARGET_PATH" >> "$conf_file"
+        # Add routes file preservation for firmware upgrades
+        grep -q "^$ROUTES_FILE$" "$conf_file" 2>/dev/null || echo "$ROUTES_FILE" >> "$conf_file"
     }
 }
 
