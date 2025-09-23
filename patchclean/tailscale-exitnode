@@ -3,7 +3,7 @@
 #
 # This script automatically configures and monitors a Tailscale exit node on OpenWrt.
 # Features:
-# - Auto-installs itself to /etc/uci-defaults/ for persistence across upgrades
+# - Auto-installs itself to /etc/init.d/ for persistence across upgrades
 # - Interactive subnet route configuration with sensible defaults
 # - Sets up hourly monitoring via cron to ensure exit node stays enabled
 # - Configures boot-time execution to handle reboots
@@ -19,8 +19,8 @@
 # The script preserves itself during sysupgrade and runs automatically after
 # installation to maintain exit node functionality without manual intervention.
 
-SCRIPT_NAME="99-tailscale-exitnode"
-TARGET_PATH="/etc/uci-defaults/$SCRIPT_NAME"
+SCRIPT_NAME="tailscale-exitnode"
+TARGET_PATH="/etc/init.d/$SCRIPT_NAME"
 ROUTES_FILE="/etc/tailscale-custom-routes"
 DEFAULT_ROUTES="0.0.0.0/0,::/0"
 
@@ -32,7 +32,7 @@ ensure_file() {
     local file="$1" content="$2" mode="$3"
     # More atomic file creation
     if [ ! -f "$file" ]; then
-        local temp_file="${file}.tmp.$"
+        local temp_file="${file}.tmp.$$"
         if printf "$content" > "$temp_file" && mv "$temp_file" "$file"; then
             [ "$mode" ] && chmod "$mode" "$file"
         else
@@ -56,14 +56,23 @@ is_running() {
     esac
 }
 
-# Setup alias in .ashrc
+# Setup alias in .ashrc and ensure .profile sources .ashrc
 setup_alias() {
     local ashrc="/root/.ashrc"
+    local profile="/root/.profile"
     local alias_line="alias exitnode=\"$TARGET_PATH check\""
+    local source_line="[ -f ~/.ashrc ] && . ~/.ashrc"
 
+    # Add alias to .ashrc
     if [ ! -f "$ashrc" ] || ! grep -qF "alias exitnode=" "$ashrc"; then
         echo "$alias_line" >> "$ashrc"
         log "Added exitnode alias to $ashrc"
+    fi
+
+    # Ensure .profile sources .ashrc
+    if [ ! -f "$profile" ] || ! grep -qF ". ~/.ashrc" "$profile"; then
+        echo "$source_line" >> "$profile"
+        log "Added .ashrc sourcing to $profile"
     fi
 }
 
@@ -102,6 +111,12 @@ Do you want to advertise additional subnet routes? (y/N)
 EOF
     printf "Choice: "; read -r choice
 
+    # Remove existing routes file if it exists to ensure clean configuration
+    [ -f "$ROUTES_FILE" ] && {
+        log "Removing existing routes file: $ROUTES_FILE"
+        rm -f "$ROUTES_FILE"
+    }
+
     # Clearer logic
     case "${choice:-n}" in
         [Yy]*)
@@ -139,7 +154,7 @@ setup_cron() {
 
     if ! echo "$current_cron" | grep -qF "$TARGET_PATH check"; then
         # Use /tmp with PID for temp file (more portable than mktemp)
-        temp_cron="/tmp/crontab.$"
+        temp_cron="/tmp/crontab.$$"
         {
             echo "$current_cron"
             echo "# Tailscale exit node check"
@@ -162,7 +177,7 @@ setup_boot() {
     ensure_file /etc/rc.local "#!/bin/sh\n# Put your custom commands here\nexit 0" +x
     grep -qF "$TARGET_PATH" /etc/rc.local || \
         sed -i "\|exit 0|i\\
-$TARGET_PATH check &" /etc/rc.local
+(sleep 30 && $TARGET_PATH check) &" /etc/rc.local
 }
 
 # Setup upgrade preservation
@@ -176,6 +191,8 @@ setup_preservation() {
 
     [ "$conf_file" ] && {
         grep -q "^$TARGET_PATH$" "$conf_file" 2>/dev/null || echo "$TARGET_PATH" >> "$conf_file"
+        # Add routes file preservation for firmware upgrades
+        grep -q "^$ROUTES_FILE$" "$conf_file" 2>/dev/null || echo "$ROUTES_FILE" >> "$conf_file"
     }
 }
 
@@ -224,7 +241,7 @@ case "${1:-setup}" in
         echo "Current routes: $([ -f "$ROUTES_FILE" ] && cat "$ROUTES_FILE" || echo "$DEFAULT_ROUTES")" ;;
     setup|*)
         # Auto-install if needed
-        if [ "$(basename "$0")" != "$SCRIPT_NAME" ] || [ "$(dirname "$0")" != "/etc/uci-defaults" ]; then
+        if [ "$(basename "$0")" != "$SCRIPT_NAME" ] || [ "$(dirname "$0")" != "/etc/init.d" ]; then
             self_install; exit $?
         fi
 
