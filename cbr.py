@@ -1,22 +1,28 @@
 #!/usr/bin/env python3
-import os
 import shutil
 import subprocess
+import os
 import sys
 from pathlib import Path
+import zipfile
 
-def extract_cbr_to_pdf(cbr_file):
-    """Extract CBR and convert to PDF with flattened image structure."""
-    cbr_path = Path(cbr_file)
-    temp_dir = cbr_path.parent / f"{cbr_path.stem}_tmp"
-    flat_dir = cbr_path.parent / f"{cbr_path.stem}_flat"
-    pdf_path = cbr_path.parent / f"{cbr_path.stem}.pdf"
+def extract_archive_to_pdf(archive_file):
+    """Extract CBR/CBZ and convert to PDF with flattened image structure."""
+    archive_path = Path(archive_file)
+    temp_dir = archive_path.parent / f"{archive_path.stem}_tmp"
+    flat_dir = archive_path.parent / f"{archive_path.stem}_flat"
+    pdf_path = archive_path.parent / f"{archive_path.stem}.pdf"
 
     try:
-        # Extract CBR
         temp_dir.mkdir(exist_ok=True)
-        subprocess.run(["unrar", "x", str(cbr_path), str(temp_dir) + "/"],
-                      check=True, capture_output=True)
+
+        # Extract based on format
+        if archive_path.suffix.lower() == '.cbr':
+            subprocess.run(["unrar", "x", str(archive_path), str(temp_dir) + "/"],
+                          check=True, capture_output=True)
+        elif archive_path.suffix.lower() == '.cbz':
+            with zipfile.ZipFile(archive_path, 'r') as zip_ref:
+                zip_ref.extractall(temp_dir)
 
         # Find all images recursively
         image_exts = {'.jpg', '.jpeg', '.png', '.gif'}
@@ -24,7 +30,7 @@ def extract_cbr_to_pdf(cbr_file):
                  if p.is_file() and p.suffix.lower() in image_exts]
 
         if not images:
-            print(f"No images found in {cbr_file}")
+            print(f"No images found in {archive_file}")
             return False
 
         # Sort images naturally
@@ -46,7 +52,10 @@ def extract_cbr_to_pdf(cbr_file):
         return True
 
     except subprocess.CalledProcessError as e:
-        print(f"✗ Error processing {cbr_file}: {e}")
+        print(f"✗ Error processing archive file {archive_file}: {e}")
+        return False
+    except zipfile.BadZipFile:
+        print(f"✗ Error extracting CBZ file: {archive_file}")
         return False
     finally:
         # Cleanup
@@ -58,20 +67,19 @@ def extract_cbr_to_pdf(cbr_file):
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         target = Path(sys.argv[1])
-
-        if target.is_file() and target.suffix.lower() == '.cbr':
-            cbr_files = [target]
+        if target.is_file() and target.suffix.lower() in {'.cbr', '.cbz'}:
+            archive_files = [target]
         elif target.is_dir():
-            cbr_files = list(target.glob("*.cbr"))
+            archive_files = list(target.glob("*.cbr")) + list(target.glob("*.cbz"))
         else:
-            print(f"Error: '{target}' is not a valid .cbr file or directory")
+            print(f"Error: '{target}' is not a valid .cbr/.cbz file or directory")
             sys.exit(1)
     else:
-        cbr_files = list(Path.cwd().glob("*.cbr"))
+        archive_files = list(Path.cwd().glob("*.cbr")) + list(Path.cwd().glob("*.cbz"))
 
-    if not cbr_files:
-        print("No .cbr files found")
+    if not archive_files:
+        print("No .cbr or .cbz files found")
         sys.exit(1)
 
-    for cbr in cbr_files:
-        extract_cbr_to_pdf(cbr)
+    for archive in archive_files:
+        extract_archive_to_pdf(archive)
