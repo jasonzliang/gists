@@ -19,7 +19,7 @@ DEFAULT_PORTRAIT_WIDTH = 900 # Default target width for portrait images
 DOWNLOAD_TIMEOUT = 30 # Seconds
 RETRY_DELAY = 1 # Second delay between retries
 MAX_RETRIES = 5 # Number of retries per image
-LANDSCAPE_WIDTH_MULTIPLIER = 1.5 # Landscape width relative to portrait width
+LANDSCAPE_WIDTH_MULTIPLIER = 1.4 # Landscape width relative to portrait width
 # ---------------------------------------------------------------------
 
 def sanitize_filename(name):
@@ -210,7 +210,9 @@ def create_pdf_from_images(image_paths, pdf_filepath, target_portrait_width):
 
     # --- Save PDF ---
     first_image = processed_images_pil[0]
+    first_image = first_image.convert('RGBA')
     images_to_append = processed_images_pil[1:]
+    images_to_append = [img.convert('RGB') for img in images_to_append]
 
     try:
         # Ensure the first image object is still valid before saving
@@ -222,7 +224,8 @@ def create_pdf_from_images(image_paths, pdf_filepath, target_portrait_width):
             "PDF",
             resolution=100.0,
             save_all=True,
-            append_images=images_to_append
+            append_images=images_to_append,
+            # quality=80
         )
         print(f"    [Success] Created PDF: {os.path.basename(pdf_filepath)}")
         success = True
