@@ -60,13 +60,19 @@ is_running() {
 setup_alias() {
     local ashrc="/root/.ashrc"
     local profile="/root/.profile"
-    local alias_line="alias exitnode=\"$TARGET_PATH check\""
+    local alias_line1="alias exitnode=\"$TARGET_PATH check\""
+    local alias_line2="alias update=\"$TARGET_PATH update\""
     local source_line="[ -f ~/.ashrc ] && . ~/.ashrc"
 
     # Add alias to .ashrc
     if [ ! -f "$ashrc" ] || ! grep -qF "alias exitnode=" "$ashrc"; then
-        echo "$alias_line" >> "$ashrc"
+        echo "$alias_line1" >> "$ashrc"
         log "Added exitnode alias to $ashrc"
+    fi
+
+    if [ ! -f "$ashrc" ] || ! grep -qF "alias update=" "$ashrc"; then
+        echo "$alias_line2" >> "$ashrc"
+        log "Added update alias to $ashrc"
     fi
 
     # Ensure .profile sources .ashrc
