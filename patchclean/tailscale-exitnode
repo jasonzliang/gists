@@ -8,6 +8,7 @@
 # - Sets up hourly monitoring via cron to ensure exit node stays enabled
 # - Configures boot-time execution to handle reboots
 # - Manages Tailscale service startup and connection verification
+# - **NEW**: Updates Tailscale to latest version via community script
 #
 # Usage:
 #   ./script.sh           # Full interactive setup (default)
@@ -15,6 +16,7 @@
 #   ./script.sh check     # Check/enable exit node status
 #   ./script.sh routes    # Show current route configuration
 #   ./script.sh reconfigure # Reconfigure advertised routes
+#   ./script.sh update    # Update Tailscale to latest version
 #
 # The script preserves itself during sysupgrade and runs automatically after
 # installation to maintain exit node functionality without manual intervention.
@@ -234,6 +236,36 @@ check_tailscale() {
     fi
 }
 
+# Update Tailscale to latest version using community script
+update_tailscale() {
+    log "Starting Tailscale update"
+    echo "=== Tailscale Update ==="
+    echo "Downloading update script..."
+
+    if wget -O /tmp/update-tailscale.sh https://raw.githubusercontent.com/Admonstrator/glinet-tailscale-updater/main/update-tailscale.sh 2>&1 | grep -v '^$'; then
+        echo "Running update..."
+        sh /tmp/update-tailscale.sh --force
+        local result=$?
+        rm -f /tmp/update-tailscale.sh
+
+        if [ $result -eq 0 ]; then
+            echo "✓ Update completed successfully"
+            log "Tailscale updated successfully"
+            # Reconfigure exit node after update
+            sleep 3
+            check_tailscale
+        else
+            echo "✗ Update failed"
+            log "Tailscale update failed"
+            return 1
+        fi
+    else
+        echo "✗ Failed to download update script"
+        log "Failed to download Tailscale update script"
+        return 1
+    fi
+}
+
 # Main execution
 case "${1:-setup}" in
     check)
@@ -245,6 +277,8 @@ case "${1:-setup}" in
         echo "Routes reconfigured. Run '$0 check' to apply" ;;
     routes)
         echo "Current routes: $([ -f "$ROUTES_FILE" ] && cat "$ROUTES_FILE" || echo "$DEFAULT_ROUTES")" ;;
+    update)
+        update_tailscale ;;
     setup|*)
         # Auto-install if needed
         if [ "$(basename "$0")" != "$SCRIPT_NAME" ] || [ "$(dirname "$0")" != "/etc/init.d" ]; then
