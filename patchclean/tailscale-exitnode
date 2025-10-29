@@ -9,6 +9,7 @@
 # - Configures boot-time execution to handle reboots
 # - Manages Tailscale service startup and connection verification
 # - **NEW**: Updates Tailscale to latest version via community script
+# - **NEW**: Self-updates from GitHub repository
 #
 # Usage:
 #   ./script.sh           # Full interactive setup (default)
@@ -16,7 +17,7 @@
 #   ./script.sh check     # Check/enable exit node status
 #   ./script.sh routes    # Show current route configuration
 #   ./script.sh reconfigure # Reconfigure advertised routes
-#   ./script.sh update    # Update Tailscale to latest version
+#   ./script.sh update    # Update both Tailscale and this script to latest version
 #
 # The script preserves itself during sysupgrade and runs automatically after
 # installation to maintain exit node functionality without manual intervention.
@@ -25,6 +26,7 @@ SCRIPT_NAME="tailscale-exitnode"
 TARGET_PATH="/etc/init.d/$SCRIPT_NAME"
 ROUTES_FILE="/etc/tailscale-custom-routes"
 DEFAULT_ROUTES="0.0.0.0/0,::/0"
+SCRIPT_URL="https://raw.githubusercontent.com/jasonzliang/gists/refs/heads/master/patchclean/tailscale-exitnode"
 
 # Logging helper
 log() { logger -t tailscale_exitnode "$1"; }
@@ -63,7 +65,7 @@ setup_alias() {
     local ashrc="/root/.ashrc"
     local profile="/root/.profile"
     local alias_line1="alias exitnode=\"$TARGET_PATH check\""
-    local alias_line2="alias update=\"$TARGET_PATH update\""
+    local alias_line2="alias updatescript=\"$TARGET_PATH update\""
     local source_line="[ -f ~/.ashrc ] && . ~/.ashrc"
 
     # Add alias to .ashrc
@@ -72,9 +74,9 @@ setup_alias() {
         log "Added exitnode alias to $ashrc"
     fi
 
-    if [ ! -f "$ashrc" ] || ! grep -qF "alias update=" "$ashrc"; then
+    if [ ! -f "$ashrc" ] || ! grep -qF "alias updatescript=" "$ashrc"; then
         echo "$alias_line2" >> "$ashrc"
-        log "Added update alias to $ashrc"
+        log "Added updatescript alias to $ashrc"
     fi
 
     # Ensure .profile sources .ashrc
@@ -236,34 +238,92 @@ check_tailscale() {
     fi
 }
 
+# Update script itself from GitHub
+update_script() {
+    local temp_script="/tmp/tailscale-exitnode.new.$$"
+
+    echo "Updating script from GitHub..."
+    log "Downloading script update from $SCRIPT_URL"
+
+    if wget -O "$temp_script" "$SCRIPT_URL" 2>&1 | grep -v '^$'; then
+        if [ -s "$temp_script" ] && head -n1 "$temp_script" | grep -q '^#!/'; then
+            if cp "$temp_script" "$TARGET_PATH" && chmod +x "$TARGET_PATH"; then
+                echo "✓ Script updated successfully"
+                log "Script self-updated from GitHub"
+                rm -f "$temp_script"
+                return 0
+            else
+                echo "✗ Failed to install updated script"
+                log "Failed to install updated script"
+                rm -f "$temp_script"
+                return 1
+            fi
+        else
+            echo "✗ Downloaded file is invalid"
+            log "Downloaded script file is invalid"
+            rm -f "$temp_script"
+            return 1
+        fi
+    else
+        echo "✗ Failed to download script update"
+        log "Failed to download script update from GitHub"
+        rm -f "$temp_script"
+        return 1
+    fi
+}
+
 # Update Tailscale to latest version using community script
 update_tailscale() {
     log "Starting Tailscale update"
-    echo "=== Tailscale Update ==="
-    echo "Downloading update script..."
+    echo "Updating Tailscale daemon..."
 
     if wget -O /tmp/update-tailscale.sh https://raw.githubusercontent.com/Admonstrator/glinet-tailscale-updater/main/update-tailscale.sh 2>&1 | grep -v '^$'; then
-        echo "Running update..."
+        echo "Running Tailscale update..."
         sh /tmp/update-tailscale.sh --force
         local result=$?
         rm -f /tmp/update-tailscale.sh
 
         if [ $result -eq 0 ]; then
-            echo "✓ Update completed successfully"
+            echo "✓ Tailscale updated successfully"
             log "Tailscale updated successfully"
-            # Reconfigure exit node after update
-            sleep 3
-            check_tailscale
+            return 0
         else
-            echo "✗ Update failed"
+            echo "✗ Tailscale update failed"
             log "Tailscale update failed"
             return 1
         fi
     else
-        echo "✗ Failed to download update script"
+        echo "✗ Failed to download Tailscale update script"
         log "Failed to download Tailscale update script"
         return 1
     fi
+}
+
+# Combined update function
+update_all() {
+    echo "=== Update Process ==="
+    local script_result=0 tailscale_result=0
+
+    # Update script first
+    update_script || script_result=$?
+
+    # Update Tailscale
+    update_tailscale || tailscale_result=$?
+
+    # Reconfigure exit node after updates
+    if [ $tailscale_result -eq 0 ]; then
+        echo "Reconfiguring exit node..."
+        sleep 3
+        check_tailscale
+    fi
+
+    # Summary
+    echo ""
+    echo "=== Update Summary ==="
+    [ $script_result -eq 0 ] && echo "✓ Script: Updated" || echo "✗ Script: Failed"
+    [ $tailscale_result -eq 0 ] && echo "✓ Tailscale: Updated" || echo "✗ Tailscale: Failed"
+
+    return $(( script_result + tailscale_result ))
 }
 
 # Main execution
@@ -278,7 +338,7 @@ case "${1:-setup}" in
     routes)
         echo "Current routes: $([ -f "$ROUTES_FILE" ] && cat "$ROUTES_FILE" || echo "$DEFAULT_ROUTES")" ;;
     update)
-        update_tailscale ;;
+        update_all ;;
     setup|*)
         # Auto-install if needed
         if [ "$(basename "$0")" != "$SCRIPT_NAME" ] || [ "$(dirname "$0")" != "/etc/init.d" ]; then
