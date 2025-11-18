@@ -34,7 +34,7 @@ bytes_to_human() {
         b=$((b / 1024))
         ((s++))
     done
-    echo "$b$d ${S[$s]}"
+    echo "$b$d ${S[s]}"
 }
 
 check_root() {
