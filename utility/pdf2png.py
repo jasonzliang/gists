@@ -1,12 +1,13 @@
 import argparse
 import sys
+import os
 from pdf2image import convert_from_path
 from PIL import Image
 
-def concat_pdf_pages(pdf_path, output_path, dpi=200, side_margin=50, top_margin=50, bottom_margin=50):
+def concat_pdf_pages(pdf_path, output_path, dpi=200, side_margin=50, top_margin=50, bottom_margin=50, quality=95):
     """
-    Converts PDF to strip with side margins, plus a top margin on the first page
-    and a bottom margin on the last page.
+    Converts PDF to strip with margins and quality control.
+    quality: JPEG quality (1-100). Ignored for PNG (which uses lossless optimization).
     """
     print(f"Processing: {pdf_path}...")
 
@@ -21,34 +22,40 @@ def concat_pdf_pages(pdf_path, output_path, dpi=200, side_margin=50, top_margin=
         max_page_width = max(page.width for page in pages)
         total_page_height = sum(page.height for page in pages)
 
-        # Final Width = Max Page Width + Left Margin + Right Margin
         final_width = max_page_width + (side_margin * 2)
-
-        # Final Height = All pages + Top Margin + Bottom Margin
         final_height = total_page_height + top_margin + bottom_margin
 
         # 2. Create blank white image
         final_image = Image.new('RGB', (final_width, final_height), (255, 255, 255))
 
         # 3. Paste pages
-        # Start at 'top_margin' so the first page is pushed down
         current_y = top_margin
 
         for page in pages:
-            # Calculate X to center the page horizontally
             x_offset = side_margin + ((max_page_width - page.width) // 2)
-
             final_image.paste(page, (x_offset, current_y))
-
-            # Move Y down by the page height so the next page touches this one immediately
             current_y += page.height
 
-        # Note: We don't need to explicitly "draw" the bottom margin.
-        # Since 'final_height' includes 'bottom_margin', the space after the last paste
-        # remains white automatically.
+        # 4. Save with Quality Settings
+        # Check file extension to determine save method
+        ext = os.path.splitext(output_path)[1].lower()
 
-        final_image.save(output_path)
-        print(f"Success! Saved to {output_path}")
+        if ext in ['.jpg', '.jpeg']:
+            # JPEG: Use 'quality' parameter (1-100)
+            # subsampling=0 turns off chroma subsampling for sharper colors/text
+            final_image.save(output_path, quality=quality, subsampling=0)
+            print(f"Success! Saved JPG to {output_path} (Quality: {quality})")
+
+        elif ext == '.png':
+            # PNG: Use 'optimize' flag for smaller file size (lossless)
+            # PNG doesn't use the 'quality' param in the same way as JPEG
+            final_image.save(output_path, optimize=True)
+            print(f"Success! Saved PNG to {output_path} (Optimized)")
+
+        else:
+            # Fallback for other formats (BMP, TIFF, etc)
+            final_image.save(output_path)
+            print(f"Success! Saved to {output_path}")
 
     except Exception as e:
         print(f"An error occurred: {e}")
@@ -60,9 +67,12 @@ if __name__ == "__main__":
     parser.add_argument("--dpi", type=int, default=200)
 
     # Margin controls
-    parser.add_argument("--side-margin", type=int, default=50, help="Pixels on Left/Right")
-    parser.add_argument("--top-margin", type=int, default=50, help="Pixels above first page")
-    parser.add_argument("--bottom-margin", type=int, default=50, help="Pixels below last page")
+    parser.add_argument("--side-margin", type=int, default=50)
+    parser.add_argument("--top-margin", type=int, default=50)
+    parser.add_argument("--bottom-margin", type=int, default=50)
+
+    # Quality control
+    parser.add_argument("--quality", type=int, default=95, help="JPEG Quality (1-100). Default is 95.")
 
     args = parser.parse_args()
 
@@ -72,5 +82,6 @@ if __name__ == "__main__":
         args.dpi,
         side_margin=args.side_margin,
         top_margin=args.top_margin,
-        bottom_margin=args.bottom_margin
+        bottom_margin=args.bottom_margin,
+        quality=args.quality
     )
