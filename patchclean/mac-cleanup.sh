@@ -27,13 +27,19 @@ error() { echo -e "${RED}[ERROR]${NC} $1" >&2; }
 section() { echo -e "\n${BOLD}${BLUE}$1${NC}"; }
 
 bytes_to_human() {
-    local b=${1:-0} d='' s=0
-    local S=(Bytes {K,M,G,T,E,P,Y,Z}iB)
-    while ((b > 1024)); do
+    local b=${1:-0}
+    local d=''
+    local s=0
+    # Bash arrays are always 0-indexed
+    local S=(Bytes KiB MiB GiB TiB PiB EiB ZiB YiB)
+
+    while ((b >= 1024)); do
+        # Calculate decimal part roughly using integer math
         d="$(printf ".%02d" $((b % 1024 * 100 / 1024)))"
         b=$((b / 1024))
         ((s++))
     done
+
     echo "$b$d ${S[s]}"
 }
 
