@@ -156,9 +156,6 @@ var implementations = [{
         }
         return null;
     },
-    prevchap: function () {
-        return this.nextchap(true);
-    },
     wait: '#comic_page'
 }, {
     name: 'manga-panda',
@@ -223,9 +220,6 @@ var implementations = [{
                 if (found) return found.href;
             }
         }
-    },
-    prevchap: function () {
-        return this.nextchap(true);
     }
 }, {
     name: 'manga-reader',
@@ -260,9 +254,6 @@ var implementations = [{
             val: (prev ? 1 : -1)
         });
         if (next) return window.location.href.replace(/\/[0-9.]+\/?([0-9]+\/?)?[^/]*$/, '/' + next);
-    },
-    prevchap: function () {
-        return this.nextchap(true);
     }
 }, {
     name: 'manga-here',
@@ -276,9 +267,6 @@ var implementations = [{
     nextchap: function (prev) {
         var chapter = W.chapter_list[W.current_chapter_index + (prev ? -1 : 1)];
         return chapter && chapter[1];
-    },
-    prevchap: function () {
-        return this.nextchap(true);
     },
     wait: function () {
         return areDefined(W.current_chapter_index, W.chapter_list, getEl('#top_chapter_list'));
@@ -316,9 +304,6 @@ var implementations = [{
         });
         if (next) return window.location.href.replace(/(\/manga\/[^\/]+).+$/, '$1' + next + '/1');
     },
-    prevchap: function () {
-        return this.nextchap(true);
-    },
     wait: '#sel_book_1 option'
 }, {
     name: 'central-de-mangas',
@@ -333,9 +318,6 @@ var implementations = [{
             val: (prev ? -1 : 1)
         });
         if (next) return window.location.href.replace(/[^\/]+$/, next);
-    },
-    prevchap: function () {
-        return this.nextchap(true);
     },
     pages: function (url, num, cb, ex) {
         url = url.slice(0, url.lastIndexOf('-') + 1) + ("0" + num).slice(-2) + url.slice(url.lastIndexOf('.'));
@@ -354,9 +336,6 @@ var implementations = [{
             val: prev ? 1 : -1
         });
         if (next) return window.location.href.replace(/\/[0-9.]+\/?([0-9]+(\/.*)?)?$/, '/' + next);
-    },
-    prevchap: function () {
-        return this.nextchap(true);
     }
 }, {
     name: 'dm5',
@@ -397,9 +376,6 @@ var implementations = [{
             var manga = window.location.pathname.slice(1).split('/')[0];
             return window.location.origin + '/' + manga + '/' + next + '/1';
         }
-    },
-    prevchap: function () {
-        return this.nextchap(true);
     }
 }, {
     name: 'japscan',
@@ -423,9 +399,6 @@ var implementations = [{
             val: (prev ? 1 : -1)
         });
         if (next) return window.location.href.replace(/\/([^\/]+)\/[0-9]+\/?$/, '/$1/' + next);
-    },
-    prevchap: function () {
-        return this.nextchap(true);
     }
 }, {
     name: 'manga-kaka',
@@ -440,9 +413,6 @@ var implementations = [{
             val: (prev ? 1 : -1)
         });
         if (chapter) return window.location.href.replace(/\/[0-9\.]+\/?([0-9]+\/?)?$/, '/' + chapter);
-    },
-    prevchap: function () {
-        return this.nextchap(true);
     }
 }, {
     name: 'manga-wall',
@@ -457,9 +427,6 @@ var implementations = [{
     curpage: '.pageselect',
     nextchap: function (prev) {
         return W.series_url + '/' + (parseInt(W.chapter.slice(1)) + (prev ? -1 : 1)) + '/1';
-    },
-    prevchap: function () {
-        return this.nextchap(true);
     }
 }, {
     name: 'anime-a',
@@ -474,9 +441,6 @@ var implementations = [{
     curpage: '.pageselect',
     nextchap: function (prev) {
         return W.series_url + 'chapter-' + (parseInt(W.chapter.match(/[0-9]+/)[0]) + (prev ? -1 : 1)) + '-page-1.html';
-    },
-    prevchap: function () {
-        return this.nextchap(true);
     }
 }, {
     name: 'kiss-manga',
@@ -517,9 +481,6 @@ var implementations = [{
         } else {
             return false;
         }
-    },
-    prevchap: function () {
-        return this.nextchap(true);
     },
     wait: function () {
         var ps = document.pageSelector1;
@@ -566,9 +527,6 @@ var implementations = [{
             chapter = chapters[current + (prev ? -1 : 1)];
         return chapter && chapter.href;
     },
-    prevchap: function () {
-        return this.nextchap(true);
-    },
     pages: function (url, num, cb, ex) {
         cb(W.pages[num - 1], num);
     }
@@ -611,9 +569,6 @@ var implementations = [{
         });
         var chapter = chapters[curIdx + (prev ? 1 : -1)];
         return chapter && chapter.href;
-    },
-    prevchap: function () {
-        return this.nextchap(true);
     }
 }, {
     name: 'mangalator',
@@ -628,9 +583,6 @@ var implementations = [{
             val: (prev ? 1 : -1)
         });
         if (next) return location.href.replace(/\?gallery=[0-9]+/, '?gallery=' + next);
-    },
-    prevchap: function () {
-        return this.nextchap(true);
     }
 }, {
     name: 'eatmanga',
@@ -772,9 +724,6 @@ var implementations = [{
         });
         return desired && desired.href;
     },
-    prevchap: function () {
-        return this.nextchap(true);
-    },
     pages: function (url, num, cb, ex) {
         cb(W.pages[num - 1].url, num);
     },
@@ -801,9 +750,6 @@ var implementations = [{
             var chapter = next.match(/[0-9.]+/)[0];
             return location.href.replace(/chapter-[0-9.]+/, 'chapter-' + chapter).replace(/page-[0-9]+/, 'page-1');
         }
-    },
-    prevchap: function () {
-        return this.nextchap(true);
     }
 }, {
     name: 'mangainn',
@@ -825,9 +771,6 @@ var implementations = [{
             val: (prev ? -1 : 1)
         });
         if (next) return location.href.replace(/\/chapter\/.+$/, '/chapter/' + next + '/page_1');
-    },
-    prevchap: function () {
-        return this.nextchap(true);
     }
 }, {
     name: 'kukudm',
@@ -873,9 +816,6 @@ var implementations = [{
             val: (prev ? -1 : 1)
         });
         if (next) return location.href.replace(/\/reader\/([^/]+)(\/.+)?$/, '/reader/$1/' + next);
-    },
-    prevchap: function () {
-        return this.nextchap(true);
     }
 }, {
     name: 'lonemanga',
@@ -890,9 +830,6 @@ var implementations = [{
             val: (prev ? 1 : -1)
         });
         if (next) return location.href.replace(/\/manga\/([^/]+)\/.+$/, '/manga/$1/' + next);
-    },
-    prevchap: function () {
-        return this.nextchap(true);
     }
 }, {
     name: 'madokami',
@@ -927,9 +864,6 @@ var implementations = [{
             val: (prev ? -1 : 1)
         });
         if (next) return location.origin + '/' + data[0].slice(1, -1) + '/' + next;
-    },
-    prevchap: function () {
-        return this.nextchap(true);
     },
     curchap: 'select[name=chapter]',
     numchaps: 'select[name=chapter]',
@@ -998,9 +932,6 @@ var implementations = [{
             val: (prev ? -1 : 1)
         });
         if (next) return location.href.replace(/[^\/]+$/, next);
-    },
-    prevchap: function () {
-        return this.nextchap(true);
     }
 }, {
     name: 'br.mangahost.com',
@@ -1037,9 +968,6 @@ var implementations = [{
             });
         }
         return nextChap;
-    },
-    prevchap: function () {
-        return this.nextchap(true);
     },
     pages: function (url, num, cb, ex) {
         var next = url.replace(/(?:(\/)2\/|[0-9]*)$/, '$1' + (num + 1));
@@ -1107,9 +1035,6 @@ var implementations = [{
         var opt = cbox[prev ? cbox.selectedIndex + 1 : cbox.selectedIndex - 1];
         var span = getEl('span.hideM0 a');
         return opt && span && span.href + parseInt(opt.value) + '/1/';
-    },
-    prevchap: function () {
-        return this.nextchap(true);
     }
 }, {
     name: 'comicastle',
@@ -1135,9 +1060,6 @@ var implementations = [{
     nextchap: function (prev) {
         var button = prev ? getEl('div.m3p > input:first-of-type') : getEl('div.m3p > input:last-of-type');
         return button && button.attributes.onclick.value.match(/\.href='([^']+)'/)[1];
-    },
-    prevchap: function () {
-        return this.nextchap(true);
     },
     pages: function (url, num, cb, ex) {
         cb(W.WebimgServerURL[0] + W.imageslist[num], num);
@@ -1179,9 +1101,6 @@ var implementations = [{
         });
         return nextChap ? location.href.replace(/(read-(comics|manga)\/[^\/]+).*/, '$1/' + nextChap) : null;
     },
-    prevchap: function () {
-        return this.nextchap(true);
-    },
     numchaps: 'select[name=chapter]',
     curchap: 'select[name=chapter]',
     invchap: true
@@ -1199,9 +1118,6 @@ var implementations = [{
                 return buttons[i].href;
             }
         }
-    },
-    prevchap: function () {
-        return this.nextchap(true);
     },
     wait: '#image'
 }, {
@@ -1254,9 +1170,6 @@ var implementations = [{
             return false;
         }
     },
-    prevchap: function () {
-        return this.nextchap(true);
-    },
     wait: function () {
         if (getEl('#mangaFile')) {
             W._nextchap = W.cInfo.nextId;
@@ -1285,9 +1198,6 @@ var implementations = [{
             val: prev ? -1 : 1
         });
     },
-    prevchap: function () {
-        return this.nextchap(true);
-    },
     curchap: '#select_node',
     numchaps: '#select_node'
 }, {
@@ -1300,7 +1210,7 @@ var implementations = [{
     numpages: '#index select',
     curpage: '#index select',
     pages: function (url, num, cb, ex) {
-        next = W._base + '?page=' + (num + 1);
+        var next = W._base + '?page=' + (num + 1);
         cb(W.pages[num - 1], next);
     },
     wait: function () {
@@ -1328,9 +1238,6 @@ var implementations = [{
             val: prev ? 1 : -1
         }));
         return num && location.href.replace(/(\/mangas\/[^\/]+\/)[0-9]+(\/[^\/]+)/, '$1' + num + '$2');
-    },
-    prevchap: function () {
-        return this.nextchap(true);
     },
     numchaps: '#chapter',
     curchap: '#chapter',
@@ -1622,7 +1529,6 @@ var getCurrentImage = function() {
   return image;
 };
 
-
 var getViewer = function (prevUrl, nextUrl, prevChapter, nextChapter, imp) {
     // Get original background color before clearing document
     var originalBgColor = window.getComputedStyle(document.body).backgroundColor || 'black';
@@ -1712,42 +1618,10 @@ var getViewer = function (prevUrl, nextUrl, prevChapter, nextChapter, imp) {
         autoloadSettingCss = toStyleStr({
             'vertical-align': 'middle'
         }, '.ml-setting-autoload'),
-        prevPageBtnCss = toStyleStr({
-            'position': 'fixed',
-            'top': '5.5%',
-            'right': '0.25%',
-            'transform': 'translateY(-50%)',
-            'background-color': '#222',
-            'color': 'white',
-            'border': 'none',
-            'padding': '5px 10px',
-            'border-radius': '5px',
-            'cursor': 'pointer',
-            'opacity': '0.4',
-            'transition': '250ms',
-            'font-size': '1.4em',
-        }, '.ml-prev-page-btn'),
-        prevPageBtnHoverCss = toStyleStr({
-            'opacity': '1'
-        }, '.ml-prev-page-btn:hover'),
-        nextPageBtnCss = toStyleStr({
-            'position': 'fixed',
-            'top': '9.5%',
-            'right': '0.25%',
-            'transform': 'translateY(-50%)',
-            'background-color': '#222',
-            'color': 'white',
-            'border': 'none',
-            'padding': '5px 10px',
-            'border-radius': '5px',
-            'cursor': 'pointer',
-            'opacity': '0.4',
-            'transition': '250ms',
-            'font-size': '1.4em',
-        }, '.ml-next-page-btn'),
-        nextPageBtnHoverCss = toStyleStr({
-            'opacity': '1'
-        }, '.ml-next-page-btn:hover');
+        pageBtnBase = {'position':'fixed','right':'0.25%','transform':'translateY(-50%)','background-color':'#222','color':'white','border':'none','padding':'5px 10px','border-radius':'5px','cursor':'pointer','opacity':'0.4','transition':'250ms','font-size':'1.4em'},
+        prevPageBtnCss = toStyleStr(Object.assign({}, pageBtnBase, {'top':'5.5%'}), '.ml-prev-page-btn'),
+        nextPageBtnCss = toStyleStr(Object.assign({}, pageBtnBase, {'top':'9.5%'}), '.ml-next-page-btn'),
+        pageBtnHoverCss = toStyleStr({'opacity':'1'}, '.ml-prev-page-btn:hover, .ml-next-page-btn:hover');
 
     // clear all styles and scripts
     var title = document.title;
@@ -1775,7 +1649,7 @@ var getViewer = function (prevUrl, nextUrl, prevChapter, nextChapter, imp) {
     document.body.innerHTML = nav + '<div class="ml-images"></div>' + nav + floatingMsg + stats;
 
     // add main styles
-    addStyle('main', true, viewerCss, imagesCss, imageCss, counterCss, navCss, navHoverCss, statsCss, statsCollapseCss, statsHoverCss, boxCss, floatingMsgCss, buttonCss, keySettingCss, autoloadSettingCss, floatingMsgAnchorCss, prevPageBtnCss, prevPageBtnHoverCss, nextPageBtnCss, nextPageBtnHoverCss);
+    addStyle('main', true, viewerCss, imagesCss, imageCss, counterCss, navCss, navHoverCss, statsCss, statsCollapseCss, statsHoverCss, boxCss, floatingMsgCss, buttonCss, keySettingCss, autoloadSettingCss, floatingMsgAnchorCss, prevPageBtnCss, nextPageBtnCss, pageBtnHoverCss);
 
 
     // add user styles
@@ -2324,7 +2198,7 @@ var getViewer = function (prevUrl, nextUrl, prevChapter, nextChapter, imp) {
         }
         var code = evt.which || evt.charCode || evt.keyCode;
         // stop propagation if key is registered
-        if (code in UI.keys) {
+        if (code in UI._keys) {
             // evt.preventDefault();
             // evt.stopImmediatePropagation();
             evt.stopPropagation();
@@ -2404,87 +2278,18 @@ function downloadChapter() {
     }
 }
 
-
-// Helper function for converting style objects to CSS strings
-function toStyleStr(styles, selector) {
-  let str = selector + ' {';
-  for (const [prop, value] of Object.entries(styles)) {
-    str += `${prop}:${value};`;
-  }
-  str += '}';
-  return str;
-}
-
 // Modified createDownloadUI function using toStyleStr
 function createDownloadUI(zipname, totalImages) {
-    // Create style element
-    const style = document.createElement('style');
-
-    // Define styles for each element as objects
-    const panelStyles = {
-        'position': 'fixed',
-        'right': '20px',
-        'top': '50px',
-        'width': '300px',
-        'background-color': 'rgba(0,0,0,0.8)',
-        'color': 'white',
-        'padding': '15px',
-        'border-radius': '5px',
-        'z-index': '100',
-        'max-height': '80vh',
-        'overflow-y': 'auto'
-    };
-
-    const titleStyles = {
-        'margin-top': '0',
-        'margin-bottom': '10px'
-    };
-
-    const progressBarStyles = {
-        'width': '100%',
-        'margin-top': '10px'
-    };
-
-    const statusStyles = {
-        'margin-top': '10px'
-    };
-
-    const downloadButtonStyles = {
-        'margin-top': '10px',
-        'padding': '5px 10px',
-        'background-color': '#4CAF50',
-        'color': 'white',
-        'border': 'none',
-        'border-radius': '5px',
-        'cursor': 'pointer',
-        'opacity': '0.5'
-    };
-
-    const closeButtonStyles = {
-        'margin-top': '10px',
-        'padding': '5px 10px',
-        'margin-right': '10px',
-        'background-color': '#4CAF50',
-        'color': 'white',
-        'border': 'none',
-        'border-radius': '5px',
-        'cursor': 'pointer'
-    };
-
-    // Convert styles to CSS strings
-    const panelStyleStr = toStyleStr(panelStyles, '.download-ui-panel');
-    const titleStyleStr = toStyleStr(titleStyles, '.download-ui-title');
-    const progressBarStyleStr = toStyleStr(progressBarStyles, '.download-ui-progress-bar');
-    const statusStyleStr = toStyleStr(statusStyles, '.download-ui-status');
-    const downloadButtonStyleStr = toStyleStr(downloadButtonStyles, '.download-ui-download-btn');
-    const closeButtonStyleStr = toStyleStr(closeButtonStyles, '.download-ui-close-btn');
-
-    // Combine all styles
-    style.textContent = panelStyleStr + '\n' + titleStyleStr + '\n' +
-                       progressBarStyleStr + '\n' + statusStyleStr + '\n' +
-                       downloadButtonStyleStr + '\n' + closeButtonStyleStr;
-
-    // Add the style to document head
+    var style = document.createElement('style');
+    var btnBase = {'margin-top':'10px','padding':'5px 10px','background-color':'#4CAF50','color':'white','border':'none','border-radius':'5px','cursor':'pointer'};
+    style.textContent = [
+        toStyleStr({'position':'fixed','right':'20px','top':'50px','width':'300px','background-color':'rgba(0,0,0,0.8)','color':'white','padding':'15px','border-radius':'5px','z-index':'100','max-height':'80vh','overflow-y':'auto'}, '.download-ui-panel'),
+        toStyleStr({'margin-top':'0','margin-bottom':'10px'}, '.download-ui-title'),
+        toStyleStr({'width':'100%','margin-top':'10px'}, '.download-ui-progress-bar'),
+        toStyleStr({'margin-top':'10px'}, '.download-ui-status'),
+        toStyleStr(Object.assign({}, btnBase, {'opacity':'0.5'}), '.download-ui-download-btn'),
+        toStyleStr(Object.assign({}, btnBase, {'margin-right':'10px'}), '.download-ui-close-btn')
+    ].join('\n');
     document.head.appendChild(style);
 
     // Create elements with classes instead of inline styles
@@ -2535,63 +2340,23 @@ function createDownloadUI(zipname, totalImages) {
 
 // Create and add download button to page
 function addDownloadButton(chapterUrl) {
-    // Create button element
-    const button = document.createElement('button');
-    button.textContent = 'Download';
-
-    // Create style element using the toStyleStr helper function
-    const style = document.createElement('style');
-
-    // Define button styles as an object
-    const buttonStyles = {
-        'position': 'fixed',
-        'top': '0px',
-        'right': '0px',
-        'z-index': '100',
-        'padding': '7px',
-        'background-color': '#222',
-        'color': 'white',
-        'border': 'none',
-        'border-bottom-left-radius': '5px',
-        'cursor': 'pointer',
-        'opacity': '0.4',
-        'transition': '250ms',
-        'font-family': 'inherit',
-        'font-size': '1.0em'
-    };
-
-    // Define hover styles as an object
-    const hoverStyles = {
-        'opacity': '1.0'
-    };
-
-    // Use toStyleStr to convert the style objects to CSS strings
-    const buttonStyleStr = toStyleStr(buttonStyles, '.download-btn');
-    const hoverStyleStr = toStyleStr(hoverStyles, '.download-btn:hover');
-
-    // Combine the styles
-    style.textContent = buttonStyleStr + '\n' + hoverStyleStr;
-
-    // Add the style to document head
+    var style = document.createElement('style');
+    style.textContent = [
+        toStyleStr({'position':'fixed','top':'0px','right':'0px','z-index':'100','padding':'7px','background-color':'#222','color':'white','border':'none','border-bottom-left-radius':'5px','cursor':'pointer','opacity':'0.4','transition':'250ms','font-family':'inherit','font-size':'1.0em'}, '.download-btn'),
+        toStyleStr({'opacity':'1.0'}, '.download-btn:hover')
+    ].join('\n');
     document.head.appendChild(style);
 
-    // Add the class to the button
+    var button = document.createElement('button');
+    button.textContent = 'Download';
     button.className = 'download-btn';
-
-    // Add click event listener with URL functionality
     button.addEventListener('click', function () {
-        var images = Array.from(document.querySelectorAll('.ml-images img')).map(function (img) {
-            return img.src;
-        });
-
-        if (images.length > 0) {
+        if (getEls('.ml-images img').length > 0) {
             downloadChapter();
         } else {
             alert('No images found in class ml-images.');
         }
     });
-
-    // Add button to the page
     document.body.appendChild(button);
     log('download button added to page');
 }
@@ -2997,8 +2762,17 @@ var waitAndLoad = function (imp) {
 
 };
 
+// Auto-generate prevchap from nextchap if not defined
+var addAutoPrevchap = function (imp) {
+    if (typeof imp.nextchap === 'function' && !imp.prevchap) {
+        imp.prevchap = function () { return this.nextchap(true); };
+    }
+    return imp;
+};
+
 var MLoaderLoadImps = function (imps) {
     var success = imps.some(function (imp) {
+        addAutoPrevchap(imp);
         if (imp.match && (new RegExp(imp.match, 'i')).test(pageUrl)) {
             currentImpName = imp.name;
 
@@ -3095,16 +2869,6 @@ MLoaderLoadImps(implementations);
 
 // ------------------ All loaders for websites ------------------ //
 
-// reusable functions to insert in implementations
-var reuse = {
-    encodeChinese: function (xhr) {
-        xhr.overrideMimeType('text/html;charset=gbk');
-    },
-    na: function () {
-        return 'N/A';
-    }
-};
-
 var exUtil = {
     clearAllTimeouts: function () {
         var id = window.setTimeout(function () {}, 0);
@@ -3159,7 +2923,7 @@ var nsfwimp = [{
         return parseInt(getEl('#page > input').value, 10);
     },
     pages: function (url, num, cb, ex) {
-        cb(page[num], num);
+        cb(W.page[num], num);
     }
 }, {
     name: 'nhentai',
@@ -3255,9 +3019,6 @@ var nsfwimp = [{
             val: (prev ? -1 : 1)
         });
         if (next) return window.location.href.replace(/\/[^\/]*\/[0-9]+\/?$/, '') + '/' + next + '/1';
-    },
-    prevchap: function () {
-        return this.nextchap(true);
     }
 }, {
     name: 'hentaifr',
@@ -3340,9 +3101,6 @@ var nsfwimp = [{
             if (location.href.indexOf(chap.href) === 0) desired = arr[idx + (prev ? 1 : -1)];
         });
         return desired && desired.href;
-    },
-    prevchap: function () {
-        return this.nextchap(true);
     },
     pages: function (url, num, cb, ex) {
         cb(W.pages[num - 1].url, num);
