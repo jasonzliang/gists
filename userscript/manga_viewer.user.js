@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Manga Loader NSFW + Download
 // @namespace    https://greasyfork.org/users/1007048
-// @version      1.6.0
+// @version      1.6.2
 // @description  This is an unofficial fork of https://greasyfork.org/fr/scripts/12657-manga-loader-nsfw all credits goes to the original author, this script add a button to download the chapter.
 // @author       viatana35, Anon
 // @icon         https://i.pinimg.com/736x/52/7f/ef/527fef673463dde3d1be2250b7120864.jpg
@@ -2199,8 +2199,8 @@ var getViewer = function (prevUrl, nextUrl, prevChapter, nextChapter, imp) {
         var code = evt.which || evt.charCode || evt.keyCode;
         // stop propagation if key is registered
         if (code in UI._keys) {
-            // evt.preventDefault();
-            // evt.stopImmediatePropagation();
+            evt.preventDefault();
+            evt.stopImmediatePropagation();
             evt.stopPropagation();
         }
         // perform action
@@ -2239,6 +2239,15 @@ var getViewer = function (prevUrl, nextUrl, prevChapter, nextChapter, imp) {
         case UI.keys.PREV_PAGE:
             goToPage('previous');
             break;
+        }
+    }, true);
+
+    window.addEventListener('keyup', function (evt) {
+        var code = evt.which || evt.charCode || evt.keyCode;
+        if (code in UI._keys) {
+            evt.preventDefault();
+            evt.stopImmediatePropagation();
+            evt.stopPropagation();
         }
     }, true);
 
