@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Google Image Translator
-// @version      2.1.0
+// @version      2.1.1
 // @description  Translate text in images using Google Cloud Vision and Translation APIs
 // @author       Anon
 // @namespace    https://github.com/yourusername
@@ -19,6 +19,7 @@
 // -- GENERAL MANGA/COMIC SITES --
 // @match *://dynasty-scans.com/chapters/*
 // @match *://prismblush.com/comic/*
+// @match *://nozomi.la/post/*
 // -- HENTAI/ADULT SITES --
 // @match *://hentaifr.net/*
 // @match *://www.hentairules.net/galleries*/picture.php*
