@@ -2201,8 +2201,8 @@ var getViewer = function (prevUrl, nextUrl, prevChapter, nextChapter, imp) {
             return;
         }
 
-        var code = evt.which || evt.charCode || evt.keyCode;
         // stop propagation if key is registered
+        var code = evt.which || evt.charCode || evt.keyCode;
         if (code in UI._keys) {
             evt.preventDefault();
             evt.stopImmediatePropagation();
