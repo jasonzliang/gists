@@ -105,7 +105,7 @@ MODERATOR_PROMPT_TEMPLATE = """You are the Debate Moderator. Your job is to:
 5. Suggest what questions remain unresolved
 
 Be fair, insightful, and help the audience understand what they just witnessed.
-Keep your summary concise - approximately {max_tokens} tokens or 3-4 short paragraphs maximum."""
+Keep your summary concise - approximately {max_tokens} tokens and 3-4 short paragraphs maximum."""
 
 CONSENSUS_PROMPT_TEMPLATE = """You are {agent_name} in the consensus-building phase of a debate.
 
@@ -123,7 +123,7 @@ Now it's time to find common ground. You must:
 4. Propose a synthesis position that incorporates multiple viewpoints
 
 Stay in character but be genuinely collaborative. The goal is progress, not victory.
-Keep your response concise - approximately {max_tokens} tokens or 2 short paragraphs maximum."""
+Keep your response concise - approximately {max_tokens} tokens and 2 short paragraphs maximum."""
 
 FINAL_VERDICT_PROMPT = """You are the Debate Moderator delivering the final verdict after the consensus round.
 
@@ -201,14 +201,14 @@ Previous arguments:
 {history_text}
 
 Now it's your turn. Respond to the previous arguments and advance your position.
-Keep your response concise - approximately {max_tokens} tokens or 2-3 short paragraphs maximum.
+Keep your response concise - approximately {max_tokens} tokens and 2-3 short paragraphs maximum.
 
 If you need current facts or data to support your argument, you can request a web search by including [SEARCH: your query] in your response. The search results will be incorporated."""
         else:
             user_message = f"""The debate topic is: {topic}
 
 You're giving the opening statement. Present your initial position on this topic.
-Keep your response concise - approximately {max_tokens} tokens or 2-3 short paragraphs maximum.
+Keep your response concise - approximately {max_tokens} tokens and 2-3 short paragraphs maximum.
 
 If you need current facts or data to support your argument, you can request a web search by including [SEARCH: your query] in your response. The search results will be incorporated."""
 
@@ -280,12 +280,12 @@ def stream_agent_response(agent: Agent, topic: str, debate_history: list[dict], 
     if debate_history:
         messages.append({
             "role": "user",
-            "content": f"Now it's your turn. Respond to the previous arguments and advance your position. Keep your response concise - approximately {max_tokens} tokens or 2-3 short paragraphs maximum."
+            "content": f"Now it's your turn. Respond to the previous arguments and advance your position. Keep your response concise - approximately {max_tokens} tokens and 2-3 short paragraphs maximum."
         })
     else:
         messages.append({
             "role": "user",
-            "content": f"You're giving the opening statement. Present your initial position on this topic. Keep your response concise - approximately {max_tokens} tokens or 2-3 short paragraphs maximum."
+            "content": f"You're giving the opening statement. Present your initial position on this topic. Keep your response concise - approximately {max_tokens} tokens and 2-3 short paragraphs maximum."
         })
 
     try:
