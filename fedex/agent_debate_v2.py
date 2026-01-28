@@ -561,20 +561,20 @@ def main():
     if st.session_state.get("generate_random_topic", False):
         st.session_state.generate_random_topic = False
         response = client.chat.completions.create(
-            model="gpt-4o",
+            model="gpt-5.2",
             messages=[{
                 "role": "user",
                 "content": """Generate a single interesting, thought-provoking debate topic.
 The topic should be:
-- Interesting but not offensive
+- Controversial but not offensive
 - Relevant to current events, technology, society, or philosophy
 - Something where reasonable people could disagree
 - Phrased as a question
 
 Respond with ONLY the topic question, nothing else."""
             }],
-            max_tokens=100,
-            temperature=1.0,
+            max_completion_tokens=1000,
+            # temperature=1.0,
         )
         # Set the widget's key directly - this updates the text_area
         st.session_state.topic_widget = response.choices[0].message.content.strip()
