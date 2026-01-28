@@ -171,7 +171,7 @@ def web_search(query: str, model: str) -> str:
     """Perform a web search using OpenAI's Responses API."""
     try:
         response = client.responses.create(
-            model="gpt-4o-mini",  # Use mini for search to save costs
+            model="gpt-5-mini",  # Use mini for search to save costs
             tools=[{"type": "web_search_preview"}],
             input=query,
         )
@@ -223,7 +223,7 @@ If you need current facts or data to support your argument, you can request a we
         kwargs = {
             "model": model,
             "messages": messages,
-            "max_completion_tokens": max_tokens * 10 if is_reasoning_model else max_tokens,
+            "max_completion_tokens": max_tokens * 5 if is_reasoning_model else max_tokens,
         }
         if not is_reasoning_model:
             kwargs["temperature"] = 0.9
@@ -293,7 +293,7 @@ def stream_agent_response(agent: Agent, topic: str, debate_history: list[dict], 
         # They need much higher token limits because reasoning tokens count against the limit
         if model in ["o1", "o3-mini", "gpt-5.2", "gpt-5-mini"]:
             # Give reasoning models 10x the tokens to account for reasoning overhead
-            reasoning_tokens = max_tokens * 10
+            reasoning_tokens = max_tokens * 5
             response = client.chat.completions.create(
                 model=model,
                 messages=messages,
@@ -347,10 +347,10 @@ def get_next_speaker(current_agent: str, debate_history: list[dict], spoken_this
 
     # Use a faster model for this decision
     response = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model="gpt-5-mini",
         messages=[{"role": "user", "content": prompt}],
-        max_tokens=100,
-        temperature=0.7,
+        max_completion_tokens=1000,
+        # temperature=0.7,
     )
 
     try:
@@ -388,7 +388,7 @@ def stream_moderator_summary(topic: str, debate_history: list[dict], model: str,
         response = client.chat.completions.create(
             model=model,
             messages=messages,
-            max_completion_tokens=(max_tokens + 200) * 10,
+            max_completion_tokens=(max_tokens + 200) * 5,
         )
         yield response.choices[0].message.content or ""
     else:
@@ -431,7 +431,7 @@ def stream_consensus_response(agent: Agent, topic: str, debate_history: list[dic
         response = client.chat.completions.create(
             model=model,
             messages=messages,
-            max_completion_tokens=max_tokens * 10,
+            max_completion_tokens=max_tokens * 5,
         )
         yield response.choices[0].message.content or ""
     else:
@@ -478,7 +478,7 @@ def stream_final_verdict(topic: str, debate_history: list[dict], consensus_histo
         response = client.chat.completions.create(
             model=model,
             messages=messages,
-            max_completion_tokens=(max_tokens + 300) * 10,
+            max_completion_tokens=(max_tokens + 300) * 5,
         )
         yield response.choices[0].message.content or ""
     else:
@@ -584,7 +584,7 @@ def main():
     if st.session_state.get("generate_random_topic", False):
         st.session_state.generate_random_topic = False
         response = client.chat.completions.create(
-            model="gpt-4.1",
+            model="gpt-4o",
             messages=[{
                 "role": "user",
                 "content": """Generate a single interesting, thought-provoking debate topic.
