@@ -71,17 +71,60 @@ def get_error_details(job_error):
     return "unknown", str(job_error)
 
 def main():
-    parser = argparse.ArgumentParser(description="Proactive Sora 2 Video Generator (Fixed Error Handling)")
+    parser = argparse.ArgumentParser(
+        description="🚀 Proactive Sora 2 Video Generator (2026 API Standard)",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Argument Details & Logic:
+--------------------------------------------------
+--prompt        The creative core. Describe your scene in detail.
+                GPT-5.2 will be used to enhance this if refinement flags are set.
 
-    parser.add_argument("--prompt", type=str, help="Text description of the video to generate")
-    parser.add_argument("--size", type=str, default="720x1280", choices=["720x1280", "1280x720", "1024x1792", "1792x1024"])
-    parser.add_argument("--seconds", type=str, default="8", choices=["4", "8", "12"])
-    parser.add_argument("--model", type=str, default="sora-2", choices=["sora-2", "sora-2-pro"])
-    parser.add_argument("--output", type=str, default="sora_video.mp4")
+--size          Resolution and Aspect Ratio:
+                - 720x1280 / 1024x1792: Best for mobile (TikTok/Reels).
+                - 1280x720 / 1792x1024: Best for cinematic/desktop viewing.
 
-    parser.add_argument("--auto-refine", action="store_true", dest="auto_refine")
-    parser.add_argument("--manual-refine", action="store_true", dest="manual_refine")
-    parser.add_argument("--video-id", type=str, dest="video_id", help="Skip generation and download an existing video ID")
+--seconds       Duration of the output video.
+                Higher durations scale the cost linearly.
+
+--model         - sora-2: Standard high-quality video, also cheaper than pro.
+                - sora-2-pro: Professional grade, required for high resolutions.
+
+--auto-refine   REACTIVE: Only rewrites the prompt if the Sora safety filter
+                rejects your initial request.
+
+--manual-refine PROACTIVE: Rewrites the prompt immediately before sending
+                to Sora to ensure maximum cinematic quality.
+
+--video-id      RECOVERY: Skips generation. Use this if your script crashed
+                but the job completed on the server.
+""")
+
+    # Video Physical Properties
+    group_specs = parser.add_argument_group('Video Specifications')
+    group_specs.add_argument("--prompt", type=str, help="Text description of the video")
+    group_specs.add_argument("--size", type=str, default="720x1280",
+                             choices=["720x1280", "1280x720", "1024x1792", "1792x1024"],
+                             help="Resolution: Portrait or Landscape options")
+    group_specs.add_argument("--seconds", type=str, default="8", choices=["4", "8", "12"],
+                             help="Video duration in seconds")
+    group_specs.add_argument("--model", type=str, default="sora-2",
+                             choices=["sora-2", "sora-2-pro"],
+                             help="Sora engine version (Standard vs Pro)")
+
+    # Logic & AI Refinement
+    group_ai = parser.add_argument_group('AI Refinement & Logic')
+    group_ai.add_argument("--auto-refine", action="store_true",
+                          help="Automatically retry with edited prompt if prompt is rejected")
+    group_ai.add_argument("--manual-refine", action="store_true",
+                          help="Preprocess prompt to ensure better quality and avoid rejection")
+
+    # Output & Recovery
+    group_out = parser.add_argument_group('Output & Recovery')
+    group_out.add_argument("--output", type=str, default="sora_video.mp4",
+                           help="Filename for the final saved video")
+    group_out.add_argument("--video-id", type=str,
+                           help="Directly download an existing job ID")
 
     args = parser.parse_args()
     client = OpenAI()
