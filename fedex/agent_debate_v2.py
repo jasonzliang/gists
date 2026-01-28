@@ -25,6 +25,7 @@ AVAILABLE_MODELS = {
     "gpt-5-mini": "GPT-5 Mini (Reasoning)",
     "o1": "O1 (Reasoning)",
     "o3-mini": "O3 Mini (Reasoning)",
+    "gpt-4.1": "GPT-4.1",
     "gpt-4o": "GPT-4o",
     "gpt-4o-mini": "GPT-4o Mini",
     "gpt-4-turbo": "GPT-4 Turbo",
@@ -583,12 +584,12 @@ def main():
     if st.session_state.get("generate_random_topic", False):
         st.session_state.generate_random_topic = False
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gpt-4.1",
             messages=[{
                 "role": "user",
                 "content": """Generate a single interesting, thought-provoking debate topic.
 The topic should be:
-- Controversial but not offensive
+- Interesting but not offensive
 - Relevant to current events, technology, society, or philosophy
 - Something where reasonable people could disagree
 - Phrased as a question
