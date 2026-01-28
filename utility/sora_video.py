@@ -115,9 +115,9 @@ Argument Details & Logic:
     # Logic & AI Refinement
     group_ai = parser.add_argument_group('AI Refinement & Logic')
     group_ai.add_argument("--auto-refine", action="store_true",
-                          help="Automatically retry with edited prompt if prompt is rejected")
+                          help="Retry with edited prompt if rejected")
     group_ai.add_argument("--manual-refine", action="store_true",
-                          help="Preprocess prompt to ensure better quality and avoid rejection")
+                          help="Pre-process prompt to avoid rejection")
 
     # Output & Recovery
     group_out = parser.add_argument_group('Output & Recovery')
