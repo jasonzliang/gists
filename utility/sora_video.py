@@ -24,8 +24,8 @@ def refine_prompt(client, original_prompt, reason="proactive"):
         completion = client.chat.completions.create(
             model="gpt-5.2",
             messages=[
-                {"role": "system", "content": "You are a cinematic prompt engineer. Rewrite video prompts to be safe for Sora 2 so it will not be rejected by automated moderation checks. Remove brand names, celebrities, and gore. Use high-end cinematic descriptions while keeping original artistic intent."},
-                {"role": "user", "content": f"Refine this prompt: '{original_prompt}'."}
+                {"role": "system", "content": "You are an AI video generator prompt engineer. Rewrite prompts to be safe for Sora 2 video model so it will not be rejected by automated moderation checks. Remove copyrighted names, speech, celebrities, and gore. If you are confident the name or speech is not copyrighted, try to preserve them as much as possible. Use high-end cinematic descriptions while staying faithful to original artistic intent."},
+                {"role": "user", "content": f"Improve the quality of this prompt: '{original_prompt}'."}
             ]
         )
         refined = completion.choices[0].message.content
