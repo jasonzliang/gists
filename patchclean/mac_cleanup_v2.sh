@@ -851,13 +851,14 @@ final_maintenance() {
         fi
     fi
 
+    # Note: Disabled as it is not really necessary
     # Spotlight reindex (aggressive or on request)
-    if (( AGGRESSIVE )) && command -v mdutil >/dev/null 2>&1; then
-        warn "Spotlight reindex will increase disk activity temporarily"
-        if confirm "Rebuild Spotlight index?" "N"; then
-            safe_command "mdutil -E /" "Spotlight reindex"
-        fi
-    fi
+    # if (( AGGRESSIVE )) && command -v mdutil >/dev/null 2>&1; then
+    #     warn "Spotlight reindex will increase disk activity temporarily"
+    #     if confirm "Rebuild Spotlight index?" "N"; then
+    #         safe_command "mdutil -E /" "Spotlight reindex"
+    #     fi
+    # fi
 
     log "Final maintenance completed"
 }
