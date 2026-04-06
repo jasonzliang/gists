@@ -37,8 +37,30 @@ def optimize_image(img_path, max_dim=2048, jpeg_quality=80):
 
     return optimized
 
-def optimize_pdf(pdf_file, max_dim=2048, jpeg_quality=80):
-    """Extract images from a PDF, optimize them, and repack into a new PDF."""
+def pack_images(image_paths, output_path, fmt="pdf"):
+    """Pack a list of image files into the specified format (pdf, cbz, cbr)."""
+    if fmt == "pdf":
+        import fitz
+        from PIL import Image
+        doc = fitz.open()
+        for img_path in image_paths:
+            img = Image.open(img_path)
+            w, h = img.size
+            page = doc.new_page(width=w, height=h)
+            page.insert_image(fitz.Rect(0, 0, w, h), filename=str(img_path))
+        doc.save(str(output_path), deflate=True, garbage=4)
+        doc.close()
+    elif fmt == "cbz":
+        with zipfile.ZipFile(output_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for img_path in image_paths:
+                zf.write(img_path, img_path.name)
+    elif fmt == "cbr":
+        subprocess.run(
+            ["rar", "a", "-ep", str(output_path)] + [str(p) for p in image_paths],
+            check=True, capture_output=True)
+
+def optimize_pdf(pdf_file, max_dim=2048, jpeg_quality=80, fmt="pdf"):
+    """Extract images from a PDF, optimize them, and repack."""
     import fitz  # PyMuPDF
     from PIL import Image
     import io
@@ -46,6 +68,7 @@ def optimize_pdf(pdf_file, max_dim=2048, jpeg_quality=80):
 
     pdf_path = Path(pdf_file)
     orig_size = pdf_path.stat().st_size
+    output_path = pdf_path.with_suffix("." + fmt)
 
     with tempfile.TemporaryDirectory() as tmp:
         tmp_dir = Path(tmp)
@@ -81,35 +104,32 @@ def optimize_pdf(pdf_file, max_dim=2048, jpeg_quality=80):
             print(f"No images found in {pdf_path.name}")
             return False
 
-        # Rebuild PDF from optimized images
-        new_doc = fitz.open()
-        for img_path in optimized_images:
-            img = Image.open(img_path)
-            w, h = img.size
-            page = new_doc.new_page(width=w, height=h)
-            page.insert_image(fitz.Rect(0, 0, w, h), filename=str(img_path))
+        # Pack into a temp file, then swap if smaller (or if format changed)
+        tmp_out = Path(str(output_path) + ".tmp")
+        pack_images(optimized_images, tmp_out, fmt)
 
-        new_doc.save(str(pdf_path) + ".tmp", deflate=True, garbage=4)
-        new_doc.close()
-
-        tmp_pdf = Path(str(pdf_path) + ".tmp")
-        opt_size = tmp_pdf.stat().st_size
-        if opt_size < orig_size:
-            tmp_pdf.replace(pdf_path)
+        opt_size = tmp_out.stat().st_size
+        if output_path != pdf_path:
+            # Different output format — always keep, remove original
+            tmp_out.replace(output_path)
+            print(f"✓ Converted {pdf_path.name} → {output_path.name} ({opt_size/1024/1024:.1f}MB)")
+            pdf_path.unlink()
+        elif opt_size < orig_size:
+            tmp_out.replace(output_path)
             saved = (1 - opt_size / orig_size) * 100
             print(f"✓ Optimized {pdf_path.name}: {orig_size/1024/1024:.1f}MB → {opt_size/1024/1024:.1f}MB ({saved:.0f}% smaller)")
         else:
-            tmp_pdf.unlink()
+            tmp_out.unlink()
             print(f"✓ {pdf_path.name} already compact, no change")
 
     return True
 
-def extract_archive_to_pdf(archive_file, optimize=False, max_dim=2048, jpeg_quality=80):
-    """Extract CBR/CBZ and convert to PDF with flattened image structure."""
+def extract_archive(archive_file, optimize=False, max_dim=2048, jpeg_quality=80, fmt="pdf"):
+    """Extract CBR/CBZ and convert to the specified output format."""
     archive_path = Path(archive_file)
     temp_dir = archive_path.parent / f"{archive_path.stem}_tmp"
     flat_dir = archive_path.parent / f"{archive_path.stem}_flat"
-    pdf_path = archive_path.parent / f"{archive_path.stem}.pdf"
+    output_path = archive_path.parent / f"{archive_path.stem}.{fmt}"
 
     try:
         temp_dir.mkdir(exist_ok=True)
@@ -144,13 +164,11 @@ def extract_archive_to_pdf(archive_file, optimize=False, max_dim=2048, jpeg_qual
                 flat_img = optimize_image(flat_img, max_dim=max_dim, jpeg_quality=jpeg_quality)
             flat_images.append(flat_img)
 
-        # Convert to PDF
-        subprocess.run(["convert"] + [str(p) for p in flat_images] + [str(pdf_path)],
-                      check=True, capture_output=True)
+        pack_images(flat_images, output_path, fmt)
 
         # Ghostscript PDF optimization: re-encodes images and strips metadata
-        if optimize and shutil.which("gs"):
-            optimized_pdf = pdf_path.with_name(pdf_path.stem + "_opt.pdf")
+        if fmt == "pdf" and optimize and shutil.which("gs"):
+            optimized_pdf = output_path.with_name(output_path.stem + "_opt.pdf")
             gs_result = subprocess.run([
                 "gs", "-sDEVICE=pdfwrite", "-dCompatibilityLevel=1.5",
                 "-dNOPAUSE", "-dBATCH", "-dQUIET",
@@ -163,19 +181,19 @@ def extract_archive_to_pdf(archive_file, optimize=False, max_dim=2048, jpeg_qual
                 "-dColorImageFilter=/FlateEncode",
                 "-dGrayImageFilter=/FlateEncode",
                 f"-sOutputFile={optimized_pdf}",
-                str(pdf_path),
+                str(output_path),
             ], capture_output=True)
             if gs_result.returncode == 0 and optimized_pdf.exists():
-                orig_size = pdf_path.stat().st_size
+                orig_size = output_path.stat().st_size
                 opt_size = optimized_pdf.stat().st_size
                 if opt_size < orig_size:
-                    optimized_pdf.replace(pdf_path)
+                    optimized_pdf.replace(output_path)
                     saved = (1 - opt_size / orig_size) * 100
-                    print(f"  Optimized: {orig_size/1024/1024:.1f}MB → {opt_size/1024/1024:.1f}MB ({saved:.0f}% smaller)")
+                    print(f"  GS pass: {orig_size/1024/1024:.1f}MB → {opt_size/1024/1024:.1f}MB ({saved:.0f}% smaller)")
                 else:
                     optimized_pdf.unlink()
 
-        print(f"✓ Created {pdf_path.name}")
+        print(f"✓ Created {output_path.name}")
         return True
 
     except subprocess.CalledProcessError as e:
@@ -201,6 +219,8 @@ if __name__ == "__main__":
                         help="JPEG quality for image optimization (1-100, default: 80)")
     parser.add_argument("-d", "--downscale", type=int, default=2048,
                         help="Max pixel dimension before downscaling (default: 2048)")
+    parser.add_argument("-f", "--format", choices=["pdf", "cbz", "cbr"], default="pdf",
+                        help="Output format (default: pdf)")
     args = parser.parse_args()
 
     archive_exts = {'.cbr', '.cbz'}
@@ -224,10 +244,11 @@ if __name__ == "__main__":
 
     for f in sorted(files):
         if f.suffix.lower() == '.pdf':
-            if args.optimize:
-                optimize_pdf(f, max_dim=args.downscale, jpeg_quality=args.quality)
+            if args.optimize or args.format != "pdf":
+                optimize_pdf(f, max_dim=args.downscale, jpeg_quality=args.quality,
+                             fmt=args.format)
             else:
-                print(f"Skipping {f.name} (use -o to optimize existing PDFs)")
+                print(f"Skipping {f.name} (use -o to optimize or -f to convert)")
         else:
-            extract_archive_to_pdf(f, optimize=args.optimize,
-                                   max_dim=args.downscale, jpeg_quality=args.quality)
+            extract_archive(f, optimize=args.optimize, max_dim=args.downscale,
+                            jpeg_quality=args.quality, fmt=args.format)
