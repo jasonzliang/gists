@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Civitai Search Filter Fix
 // @namespace    http://tampermonkey.net/
-// @version      1.0
+// @version      1.0.1
 // @icon         https://registry.npmmirror.com/@lobehub/icons-static-png/latest/files/dark/civitai-color.png
 // @description  Fix Civitai search by removing unsupported user.id filters
 // @author       You
@@ -25,7 +25,9 @@
         const [url, options] = args;
 
         // Check if this is a search request to Meilisearch
-        if (url && (url.includes('search.civitai.com') || url.includes('/multi-search'))) {
+        // Handle Request objects: extract URL string to avoid TypeError on .includes()
+        const urlStr = typeof url === 'string' ? url : (url instanceof Request ? url.url : '');
+        if (urlStr && (urlStr.includes('search.civitai.com') || urlStr.includes('/multi-search'))) {
             console.log('Civitai Search Fix: Intercepted search request', url);
 
             // If there's a request body, modify it

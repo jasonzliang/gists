@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Google Image Translator
-// @version      2.1.1
+// @version      2.1.2
 // @description  Translate text in images using Google Cloud Vision and Translation APIs
 // @author       Anon
 // @namespace    https://github.com/yourusername
@@ -1152,7 +1152,7 @@
     }
 
     function translateAllImages() {
-        const images = Array.from($('img')).filter(isEligibleImage);
+        const images = Array.from($$('img')).filter(isEligibleImage);
         if (!images.length) {
             showToast('No suitable images found');
             return;
