@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Google Image Translator
-// @version      2.1.2
+// @version      2.2.0
 // @description  Translate text in images using Google Cloud Vision and Translation APIs
 // @author       Anon
 // @namespace    https://github.com/yourusername
@@ -74,7 +74,7 @@
         minImageHeight: 50,
         useDbscan: true,
         dbscanEps: 50,
-        dbscanMinPoints: 3
+        dbscanMinPoints: 1
     };
 
     let config = { ...DEFAULT_CONFIG, ...GM_getValue('imageTranslatorConfig', {}) };
@@ -88,7 +88,7 @@
             this.options = {
                 // DBSCAN base parameters (from settings menu)
                 dbscanEps: 50,
-                dbscanMinPoints: 3,
+                dbscanMinPoints: 1,
 
                 // Direction detection (optimized values)
                 textDirection: 'auto',
@@ -100,18 +100,18 @@
                 // Image size-based tolerance ratios (always enabled)
                 imageSizeAdaptive: true,
 
-                // Horizontal text tolerances as ratios of image dimensions (increased for better clustering)
+                // Horizontal text tolerances as ratios of image dimensions
                 horizontal: {
-                    clusterToleranceXRatio: 0.05,
-                    clusterToleranceYRatio: 0.2,
+                    clusterToleranceXRatio: 0.2,    // loose in reading direction (X)
+                    clusterToleranceYRatio: 0.05,   // tight in line-stacking direction (Y)
                     blockToleranceXRatio: 0.02,
                     blockToleranceYRatio: 0.02
                 },
 
-                // Vertical text tolerances as ratios of image dimensions (increased for better clustering)
+                // Vertical text tolerances as ratios of image dimensions
                 vertical: {
-                    clusterToleranceXRatio: 0.05,
-                    clusterToleranceYRatio: 0.2,
+                    clusterToleranceXRatio: 0.05,   // tight in column-spacing direction (X)
+                    clusterToleranceYRatio: 0.2,    // loose in reading direction (Y)
                     blockToleranceXRatio: 0.02,
                     blockToleranceYRatio: 0.02
                 },
@@ -119,11 +119,10 @@
                 ...options
             };
 
-            // Store image dimensions for adaptive calculations
             this.imageDimensions = null;
         }
 
-        detectText(imageBase64) {
+        detectText(imageBase64, imageDimensions) {
             return new Promise((resolve, reject) => {
                 if (!this.apiKey) {
                     reject(new Error('Vision API key not configured'));
@@ -136,11 +135,7 @@
                     data: JSON.stringify({
                         requests: [{
                             image: { content: imageBase64 },
-                            features: [{ type: 'TEXT_DETECTION', maxResults: 50 }],
-                            imageContext: {
-                                // Request image properties for size-adaptive tolerances
-                                cropHintsParams: { aspectRatios: [1.0] }
-                            }
+                            features: [{ type: 'DOCUMENT_TEXT_DETECTION' }]
                         }]
                     }),
                     headers: { 'Content-Type': 'application/json' },
@@ -152,35 +147,53 @@
                                 return;
                             }
 
-                            const annotations = result.responses?.[0]?.textAnnotations;
-                            if (!annotations?.length) {
+                            const responseData = result.responses?.[0];
+                            const fullTextAnno = responseData?.fullTextAnnotation;
+                            const annotations = responseData?.textAnnotations;
+
+                            if (!annotations?.length && !fullTextAnno) {
                                 resolve({ fullText: '', textBlocks: [] });
                                 return;
                             }
 
-                            const originalText = annotations[0].description;
-                            const textBlocks = annotations.slice(1).map(a => ({
+                            // Set image dimensions: prefer API > passed-in > estimated later
+                            if (fullTextAnno?.pages?.[0]?.width && fullTextAnno.pages[0].height) {
+                                this.imageDimensions = {
+                                    width: fullTextAnno.pages[0].width,
+                                    height: fullTextAnno.pages[0].height
+                                };
+                            } else if (imageDimensions) {
+                                this.imageDimensions = imageDimensions;
+                            }
+
+                            // Primary path: DOCUMENT_TEXT_DETECTION paragraph grouping
+                            if (config.useDbscan && fullTextAnno) {
+                                resolve(this.processFullTextAnnotation(fullTextAnno));
+                                return;
+                            }
+
+                            // Fallback: word-level annotations + DBSCAN
+                            const originalText = annotations?.[0]?.description || '';
+                            const textBlocks = (annotations || []).slice(1).map(a => ({
                                 text: a.description,
                                 boundingBox: a.boundingPoly,
                                 center: this.calculateCenter(a.boundingPoly),
                                 dimensions: this.calculateBlockDimensions(a.boundingPoly)
                             }));
 
-                            if (config.useDbscan) {
-                                // Estimate image dimensions from text block positions
-                                this.imageDimensions = this.estimateImageDimensions(textBlocks);
-                                console.log('[TextDetector] Estimated image dimensions:', this.imageDimensions);
+                            if (config.useDbscan && textBlocks.length > 0) {
+                                if (!this.imageDimensions) {
+                                    this.imageDimensions = this.estimateImageDimensions(textBlocks);
+                                }
+                                console.log('[TextDetector] Image dimensions:', this.imageDimensions);
 
-                                // Enhanced direction detection
                                 const directionAnalysis = this.detectTextDirection(textBlocks);
-                                console.log(`[TextDetector] Direction analysis:`, directionAnalysis);
+                                console.log('[TextDetector] Direction analysis:', directionAnalysis);
 
-                                // Process with adaptive parameters
                                 const processedText = this.processWithAdaptiveDbscan(textBlocks, directionAnalysis);
-
                                 resolve({
                                     fullText: processedText,
-                                    textBlocks: textBlocks,
+                                    textBlocks,
                                     direction: directionAnalysis.direction,
                                     directionConfidence: directionAnalysis.confidence,
                                     imageDimensions: this.imageDimensions,
@@ -189,7 +202,7 @@
                             } else {
                                 resolve({
                                     fullText: originalText,
-                                    textBlocks: textBlocks,
+                                    textBlocks,
                                     processingMethod: 'no_processing'
                                 });
                             }
@@ -200,6 +213,59 @@
                     onerror: reject
                 });
             });
+        }
+
+        // Process DOCUMENT_TEXT_DETECTION structured response
+        processFullTextAnnotation(fullTextAnno) {
+            const page = fullTextAnno.pages?.[0];
+            const fullText = fullTextAnno.text || '';
+
+            if (!fullText.trim()) {
+                return { fullText: '', textBlocks: [], processingMethod: 'document_text_detection' };
+            }
+
+            if (page?.width && page?.height) {
+                this.imageDimensions = { width: page.width, height: page.height };
+            }
+
+            const detectedLang = page?.property?.detectedLanguages?.[0]?.languageCode || '';
+            const isCJKLang = /^(ja|ko|zh)/.test(detectedLang);
+
+            // Extract paragraph blocks for metadata
+            const paragraphBlocks = [];
+            for (const block of (page?.blocks || [])) {
+                if (block.blockType !== 'TEXT') continue;
+                for (const paragraph of (block.paragraphs || [])) {
+                    const words = (paragraph.words || []).map(word =>
+                        (word.symbols || []).map(s => s.text).join('')
+                    );
+                    const text = words.join(isCJKLang ? '' : ' ');
+                    if (text.trim() && paragraph.boundingBox) {
+                        paragraphBlocks.push({
+                            text: text.trim(),
+                            boundingBox: paragraph.boundingBox,
+                            center: this.calculateCenter(paragraph.boundingBox),
+                            dimensions: this.calculateBlockDimensions(paragraph.boundingBox)
+                        });
+                    }
+                }
+            }
+
+            const directionAnalysis = paragraphBlocks.length > 0 ?
+                this.detectTextDirection(paragraphBlocks) :
+                { direction: 'horizontal', confidence: 'default' };
+
+            console.log(`[TextDetector] DOCUMENT_TEXT_DETECTION: ${paragraphBlocks.length} paragraphs, lang=${detectedLang}, direction=${directionAnalysis.direction}`);
+
+            return {
+                fullText,
+                textBlocks: paragraphBlocks,
+                direction: directionAnalysis.direction,
+                directionConfidence: directionAnalysis.confidence,
+                imageDimensions: this.imageDimensions,
+                detectedLanguage: detectedLang,
+                processingMethod: 'document_text_detection'
+            };
         }
 
         // Estimate image dimensions from text block positions
@@ -355,24 +421,26 @@
         processWithAdaptiveDbscan(textBlocks, directionAnalysis) {
             const direction = directionAnalysis.direction;
 
-            // Always use DBSCAN parameters from settings menu
-            const dbscanEps = this.options.dbscanEps;
-            const dbscanMinPoints = this.options.dbscanMinPoints;
+            // Calculate adaptive tolerances BEFORE DBSCAN (used for anisotropic neighborhood)
+            const tolerances = this.calculateAdaptiveTolerances(direction, directionAnalysis);
+
+            // Scale cluster tolerances by user epsilon (50 = 1.0x baseline)
+            const epsMultiplier = this.options.dbscanEps / 50;
+            const epsX = tolerances.clusterToleranceX * epsMultiplier;
+            const epsY = tolerances.clusterToleranceY * epsMultiplier;
+            const minPoints = this.options.dbscanMinPoints;
 
             console.log(`[TextDetector] Processing as ${direction} text (${directionAnalysis.confidence} confidence)`);
-            console.log(`[TextDetector] DBSCAN params: eps=${dbscanEps}, minPoints=${dbscanMinPoints}`);
+            console.log(`[TextDetector] Anisotropic DBSCAN: epsX=${epsX}, epsY=${epsY}, minPoints=${minPoints}`);
 
-            // Run DBSCAN clustering
-            const clusters = this.dbscanClustering(textBlocks, dbscanEps, dbscanMinPoints);
+            // Run DBSCAN with anisotropic rectangular neighborhood
+            const clusters = this.dbscanClustering(textBlocks, epsX, epsY, minPoints);
 
             console.log(`[TextDetector] DBSCAN detected ${clusters.length} clusters`);
             clusters.forEach((cluster, i) => {
                 console.log(`  Cluster ${i + 1} (${cluster.length} blocks):`,
                     cluster.map(block => `"${block.text}"`).join(', '));
             });
-
-            // Calculate adaptive tolerances
-            const tolerances = this.calculateAdaptiveTolerances(direction, directionAnalysis);
 
             // Sort clusters and blocks using direction-specific logic
             const sortedClusters = this.sortClusters(clusters, tolerances);
@@ -381,7 +449,7 @@
                 this.sortBlocksInCluster(cluster, tolerances);
             });
 
-            // Join text appropriately for the detected direction
+            // Join text with script-aware spacing
             const finalText = this.joinTextByDirection(sortedClusters, direction);
 
             console.log(`[TextDetector] Final ${direction} text:`, finalText);
@@ -397,23 +465,23 @@
                     const centerB = this.getClusterCenter(b);
 
                     if (tolerances.direction === 'vertical') {
-                        // Vertical: sort by Y first (right to left for manga), then X
-                        if (Math.abs(centerA.y - centerB.y) > tolerances.clusterToleranceY) {
-                            return centerA.y - centerB.y; // Top to bottom within same column
-                        }
+                        // Vertical manga: columns right to left, then top to bottom within column
                         if (Math.abs(centerA.x - centerB.x) > tolerances.clusterToleranceX) {
-                            return centerB.x - centerA.x; // Right to left (Japanese reading order)
+                            return centerB.x - centerA.x; // Right to left (column order)
                         }
-                        return 0;
+                        if (Math.abs(centerA.y - centerB.y) > tolerances.clusterToleranceY) {
+                            return centerA.y - centerB.y; // Top to bottom within column
+                        }
+                        return (centerB.x - centerA.x) || (centerA.y - centerB.y);
                     } else {
-                        // Horizontal: sort by Y first (top to bottom), then X
+                        // Horizontal: rows top to bottom, then left to right within row
                         if (Math.abs(centerA.y - centerB.y) > tolerances.clusterToleranceY) {
                             return centerA.y - centerB.y; // Top to bottom
                         }
                         if (Math.abs(centerA.x - centerB.x) > tolerances.clusterToleranceX) {
-                            return centerA.x - centerB.x; // Left to right within same line
+                            return centerA.x - centerB.x; // Left to right
                         }
-                        return 0;
+                        return (centerA.y - centerB.y) || (centerA.x - centerB.x);
                     }
                 });
         }
@@ -425,37 +493,54 @@
                     if (Math.abs(a.center.x - b.center.x) > tolerances.blockToleranceX) {
                         return b.center.x - a.center.x; // Right to left if on same level
                     }
-                    // Vertical: characters stack top to bottom in columns
                     if (Math.abs(a.center.y - b.center.y) > tolerances.blockToleranceY) {
                         return a.center.y - b.center.y; // Top to bottom
                     }
-                    return 0;
+                    return (b.center.x - a.center.x) || (a.center.y - b.center.y);
                 } else {
-                    // Horizontal: characters flow left to right in lines
                     if (Math.abs(a.center.y - b.center.y) > tolerances.blockToleranceY) {
                         return a.center.y - b.center.y; // Top to bottom (different lines)
                     }
                     if (Math.abs(a.center.x - b.center.x) > tolerances.blockToleranceX) {
                         return a.center.x - b.center.x; // Left to right within same line
                     }
-                    return 0;
+                    return (a.center.y - b.center.y) || (a.center.x - b.center.x);
                 }
             });
         }
 
-        // Join text based on detected direction
+        // Join text with script-aware spacing (CJK: no space, Latin: space)
         joinTextByDirection(sortedClusters, direction) {
-            if (direction === 'vertical') {
-                // Vertical: each cluster is a column, characters join without spaces
-                return sortedClusters
-                    .map(cluster => cluster.map(block => block.text).join(''))
-                    .join('\n');
-            } else {
-                // Horizontal: each cluster is a line, words join with spaces
-                return sortedClusters
-                    .map(cluster => cluster.map(block => block.text).join(' '))
-                    .join('\n');
-            }
+            return sortedClusters
+                .map(cluster => {
+                    const texts = cluster.map(block => block.text);
+                    return texts.reduce((result, text, i) => {
+                        if (i === 0) return text;
+                        const prev = texts[i - 1];
+                        const needsSpace = !this.isCJKBoundary(prev, text);
+                        return result + (needsSpace ? ' ' : '') + text;
+                    }, '');
+                })
+                .join('\n');
+        }
+
+        // Check if boundary between two text blocks is CJK (no space needed)
+        isCJKBoundary(text1, text2) {
+            const lastChar = text1.charAt(text1.length - 1);
+            const firstChar = text2.charAt(0);
+            return this.isCJKChar(lastChar) || this.isCJKChar(firstChar);
+        }
+
+        // Check if a character is CJK/Kana/fullwidth (languages that don't use spaces)
+        isCJKChar(ch) {
+            const code = ch.charCodeAt(0);
+            return (code >= 0x2E80 && code <= 0x9FFF) ||   // CJK Radicals, Kangxi, Unified Ideographs
+                   (code >= 0xF900 && code <= 0xFAFF) ||    // CJK Compatibility Ideographs
+                   (code >= 0xFE30 && code <= 0xFE4F) ||    // CJK Compatibility Forms
+                   (code >= 0x3000 && code <= 0x303F) ||    // CJK Punctuation
+                   (code >= 0x3040 && code <= 0x309F) ||    // Hiragana
+                   (code >= 0x30A0 && code <= 0x30FF) ||    // Katakana
+                   (code >= 0xFF00 && code <= 0xFFEF);      // Fullwidth Forms
         }
 
         calculateAverageBlockSize(textBlocks) {
@@ -507,7 +592,7 @@
             return Math.sqrt(dx * dx + dy * dy);
         }
 
-        dbscanClustering(textBlocks, epsilon, minPoints) {
+        dbscanClustering(textBlocks, epsX, epsY, minPoints) {
             const clusters = [];
             const visited = new Set();
             const clustered = new Set();
@@ -516,12 +601,12 @@
                 if (visited.has(i)) continue;
 
                 visited.add(i);
-                const neighbors = this.getNeighbors(textBlocks, i, epsilon);
+                const neighbors = this.getNeighbors(textBlocks, i, epsX, epsY);
 
                 if (neighbors.length < minPoints) continue;
 
                 const cluster = [];
-                this.expandCluster(textBlocks, i, neighbors, cluster, clustered, visited, epsilon, minPoints);
+                this.expandCluster(textBlocks, i, neighbors, cluster, clustered, visited, epsX, epsY, minPoints);
 
                 if (cluster.length > 0) clusters.push(cluster);
             }
@@ -536,12 +621,15 @@
             return clusters;
         }
 
-        getNeighbors(textBlocks, pointIndex, epsilon) {
+        // Rectangular anisotropic neighborhood (direction-aware)
+        getNeighbors(textBlocks, pointIndex, epsX, epsY) {
             const neighbors = [];
-            const currentPoint = textBlocks[pointIndex];
+            const current = textBlocks[pointIndex];
 
             for (let i = 0; i < textBlocks.length; i++) {
-                if (i !== pointIndex && this.calculateDistance(currentPoint.center, textBlocks[i].center) <= epsilon) {
+                if (i !== pointIndex &&
+                    Math.abs(current.center.x - textBlocks[i].center.x) <= epsX &&
+                    Math.abs(current.center.y - textBlocks[i].center.y) <= epsY) {
                     neighbors.push(i);
                 }
             }
@@ -549,19 +637,25 @@
             return neighbors;
         }
 
-        expandCluster(textBlocks, pointIndex, neighbors, cluster, clustered, visited, epsilon, minPoints) {
+        expandCluster(textBlocks, pointIndex, neighbors, cluster, clustered, visited, epsX, epsY, minPoints) {
             cluster.push(textBlocks[pointIndex]);
             clustered.add(pointIndex);
 
+            const neighborSet = new Set(neighbors);
             for (let i = 0; i < neighbors.length; i++) {
                 const neighborIndex = neighbors[i];
 
                 if (!visited.has(neighborIndex)) {
                     visited.add(neighborIndex);
-                    const neighborNeighbors = this.getNeighbors(textBlocks, neighborIndex, epsilon);
+                    const newNeighbors = this.getNeighbors(textBlocks, neighborIndex, epsX, epsY);
 
-                    if (neighborNeighbors.length >= minPoints) {
-                        neighbors.push(...neighborNeighbors.filter(n => !neighbors.includes(n) && n !== neighborIndex));
+                    if (newNeighbors.length >= minPoints) {
+                        for (const n of newNeighbors) {
+                            if (!neighborSet.has(n)) {
+                                neighborSet.add(n);
+                                neighbors.push(n);
+                            }
+                        }
                     }
                 }
 
@@ -597,9 +691,20 @@
             return !skipPatterns.some(pattern => pattern.test(text.trim()));
         }
 
-        async translateWithSmartDetection(text, targetLang = 'en') {
+        async translateWithSmartDetection(text, targetLang = 'en', sourceLang = 'auto') {
             if (!this.isTranslatableText(text)) {
                 throw new Error('Text does not appear to be translatable');
+            }
+
+            // If user explicitly set a source language, use it directly
+            if (sourceLang && sourceLang !== 'auto') {
+                const result = await this.translateText(text, sourceLang, targetLang);
+                return {
+                    ...result,
+                    detectedLanguage: sourceLang,
+                    confidence: 1.0,
+                    detectionMethod: 'manual'
+                };
             }
 
             const cached = this.getCachedDetection(text);
@@ -941,13 +1046,13 @@
     }
 
     // Legacy detectText function for backward compatibility
-    function detectText(imageBase64) {
+    function detectText(imageBase64, imageWidth, imageHeight) {
         const adaptiveDetector = new TextDetector(config.visionApiKey, {
-            // DBSCAN parameters from settings menu
             dbscanEps: config.dbscanEps,
             dbscanMinPoints: config.dbscanMinPoints,
         });
-        return adaptiveDetector.detectText(imageBase64);
+        const dims = (imageWidth && imageHeight) ? { width: imageWidth, height: imageHeight } : null;
+        return adaptiveDetector.detectText(imageBase64, dims);
     }
 
     // Legacy translateText function for backward compatibility
@@ -1051,7 +1156,7 @@
             document.body.appendChild(loading);
 
             const base64 = await imageToBase64(img);
-            const { fullText } = await detectText(base64);
+            const { fullText } = await detectText(base64, img.naturalWidth, img.naturalHeight);
 
             if (!fullText?.trim()) {
                 showToast('No text detected in image');
@@ -1062,7 +1167,7 @@
 
             img.originalText = fullText;
 
-            const result = await detector.translateWithSmartDetection(fullText, config.targetLang);
+            const result = await detector.translateWithSmartDetection(fullText, config.targetLang, config.sourceLang);
             createTranslationDisplay(img, result);
 
             showToast(`Translation complete!`);
@@ -1096,10 +1201,10 @@
                 <input type="checkbox" id="useDbscan" ${config.useDbscan !== false ? 'checked' : ''}>
                 Enable DBSCAN text clustering
             </label>
-            <label>Epsilon Distance (pixels)</label>
+            <label>Clustering Sensitivity (50 = default)</label>
             <input type="number" id="dbscanEps" min="10" max="200" value="${config.dbscanEps || 50}">
             <label>Minimum Points</label>
-            <input type="number" id="dbscanMinPoints" min="1" max="10" value="${config.dbscanMinPoints || 3}">
+            <input type="number" id="dbscanMinPoints" min="1" max="10" value="${config.dbscanMinPoints || 1}">
             <h3>Appearance</h3>
             <label>Font Size (px)</label>
             <input type="number" id="fontSize" min="8" max="36" value="${config.fontSize}">
