@@ -10,12 +10,12 @@
 #   - Reports space usage for manual review
 #
 # Usage:
-#   chmod +x mac_cleanup_v3.sh
-#   sudo ./mac_cleanup_v3.sh --dry-run       # Preview what would be cleaned
-#   sudo ./mac_cleanup_v3.sh                 # Standard cleanup with prompts
-#   sudo ./mac_cleanup_v3.sh --aggressive    # More thorough cleanup
-#   sudo ./mac_cleanup_v3.sh -y              # Auto-accept all prompts
-#   sudo ./mac_cleanup_v3.sh --aggressive -y # Full cleanup, no prompts
+#   chmod +x mac_cleanup_v2.sh
+#   sudo ./mac_cleanup_v2.sh --dry-run       # Preview what would be cleaned
+#   sudo ./mac_cleanup_v2.sh                 # Standard cleanup with prompts
+#   sudo ./mac_cleanup_v2.sh --aggressive    # More thorough cleanup
+#   sudo ./mac_cleanup_v2.sh -y              # Auto-accept all prompts
+#   sudo ./mac_cleanup_v2.sh --aggressive -y # Full cleanup, no prompts
 #
 
 set -euo pipefail
@@ -115,7 +115,7 @@ print_usage() {
 $SCRIPT_NAME v$SCRIPT_VERSION
 
 Usage:
-  sudo ./mac_cleanup_v3.sh [OPTIONS]
+  sudo ./mac_cleanup_v2.sh [OPTIONS]
 
 Options:
   --dry-run     Preview what would be removed without deleting anything
@@ -125,9 +125,9 @@ Options:
   --version     Show version information
 
 Examples:
-  sudo ./mac_cleanup_v3.sh --dry-run       # Safe preview
-  sudo ./mac_cleanup_v3.sh                 # Interactive cleanup
-  sudo ./mac_cleanup_v3.sh --aggressive -y # Full automated cleanup
+  sudo ./mac_cleanup_v2.sh --dry-run       # Safe preview
+  sudo ./mac_cleanup_v2.sh                 # Interactive cleanup
+  sudo ./mac_cleanup_v2.sh --aggressive -y # Full automated cleanup
 EOF
 }
 
@@ -172,7 +172,7 @@ resolve_user() {
         su="$(stat -f%Su /dev/console 2>/dev/null || true)"
     fi
     if [[ -z "$su" || "$su" == "root" ]]; then
-        error "Could not determine target user. Please run via: sudo ./mac_cleanup_v3.sh"
+        error "Could not determine target user. Please run via: sudo ./mac_cleanup_v2.sh"
         exit 1
     fi
 
@@ -482,11 +482,32 @@ cleanup_browser_caches() {
     rm_children "$USER_HOME/Library/Caches/com.apple.Safari/Webpage Previews" "Safari Webpage Previews"
     rm_children "$USER_HOME/Library/Caches/com.apple.Safari/fsCachedData" "Safari fsCachedData"
 
-    # Chrome
-    rm_children "$USER_HOME/Library/Caches/com.google.Chrome/Default/Cache" "Chrome Cache"
-    rm_children "$USER_HOME/Library/Caches/com.google.Chrome/Default/Code Cache" "Chrome Code Cache"
-    rm_children "$USER_HOME/Library/Caches/com.google.Chrome/Default/GPUCache" "Chrome GPUCache"
-    rm_children "$USER_HOME/Library/Caches/com.google.Chrome/ShaderCache" "Chrome ShaderCache"
+    # Chrome — IMPORTANT: We only touch ~/Library/Caches/Google (HTTP/code/GPU
+    # caches). We NEVER touch ~/Library/Application Support/Google/Chrome,
+    # which holds cookies, Login Data, Bookmarks, History, and Preferences.
+    # Modern Chrome (v100+) uses ~/Library/Caches/Google/Chrome; older
+    # versions used ~/Library/Caches/com.google.Chrome — we clean both.
+    local chrome_profile
+    for chrome_profile in \
+        "$USER_HOME/Library/Caches/Google/Chrome/Default" \
+        "$USER_HOME/Library/Caches/Google/Chrome/Profile "* \
+        "$USER_HOME/Library/Caches/com.google.Chrome/Default" \
+        "$USER_HOME/Library/Caches/com.google.Chrome/Profile "*; do
+        [[ -d "$chrome_profile" ]] || continue
+        rm_children "$chrome_profile/Cache" "Chrome Cache ($(basename "$chrome_profile"))"
+        rm_children "$chrome_profile/Code Cache" "Chrome Code Cache ($(basename "$chrome_profile"))"
+        rm_children "$chrome_profile/GPUCache" "Chrome GPUCache ($(basename "$chrome_profile"))"
+        rm_children "$chrome_profile/Service Worker/CacheStorage" "Chrome SW CacheStorage"
+        rm_children "$chrome_profile/Service Worker/ScriptCache" "Chrome SW ScriptCache"
+    done
+    rm_children "$USER_HOME/Library/Caches/Google/Chrome/ShaderCache" "Chrome ShaderCache"
+    rm_children "$USER_HOME/Library/Caches/com.google.Chrome/ShaderCache" "Chrome ShaderCache (legacy)"
+    rm_children "$USER_HOME/Library/Caches/Google/Chrome/component_crx_cache" "Chrome component CRX cache"
+
+    # Chromium-family siblings — same cookie-preservation rule applies
+    rm_children "$USER_HOME/Library/Caches/Microsoft Edge" "Edge Cache"
+    rm_children "$USER_HOME/Library/Caches/BraveSoftware/Brave-Browser" "Brave Cache"
+    rm_children "$USER_HOME/Library/Caches/Arc" "Arc Cache"
 
     # Firefox
     if [[ -d "$USER_HOME/Library/Caches/Firefox/Profiles" ]]; then
@@ -556,6 +577,21 @@ cleanup_development_tools() {
     if command -v yarn >/dev/null 2>&1; then
         run_as_user "yarn cache clean" "Yarn cache clean"
     fi
+
+    # pnpm
+    if command -v pnpm >/dev/null 2>&1; then
+        run_as_user "pnpm store prune" "pnpm store prune"
+    fi
+
+    # Bun (the bun cache is large — audit found 516 MB on this machine)
+    if command -v bun >/dev/null 2>&1; then
+        run_as_user "bun pm cache rm" "Bun cache clean"
+    fi
+    rm_children "$USER_HOME/.bun/install/cache" "Bun install cache (fallback)"
+
+    # node-gyp (native build downloads — Node headers, electron headers)
+    rm_children "$USER_HOME/Library/Caches/node-gyp" "node-gyp cache"
+    rm_children "$USER_HOME/.electron-gyp" "electron-gyp cache"
 
     # Ruby gems
     if command -v gem >/dev/null 2>&1; then
@@ -664,7 +700,40 @@ cleanup_applications() {
     rm_children "$USER_HOME/Library/Application Support/Steam/steamapps/downloading" "Steam downloads"
     rm_children "$USER_HOME/Library/Caches/com.valvesoftware.steam" "Steam cache"
 
+    # Sublime Text — index/cache rebuilds automatically on next launch
+    rm_children "$USER_HOME/Library/Caches/Sublime Text" "Sublime Text cache"
+    rm_children "$USER_HOME/Library/Caches/com.sublimetext.4" "Sublime Text 4 cache"
+
+    # OpenComic thumbnails (audit found 2.2 GB on this machine)
+    rm_children "$USER_HOME/Library/Caches/opencomic" "OpenComic thumbnails"
+
+    # Slack auto-updater payload (separate from Slack's main cache)
+    rm_children "$USER_HOME/Library/Caches/com.tinyspeck.slackmacgap.ShipIt" "Slack ShipIt updater"
+
+    # Legacy Java Applet Plugin cache — almost certainly unused on modern Macs
+    rm_children "$USER_HOME/Library/Caches/com.oracle.java.JavaAppletPlugin" "Java Applet Plugin cache"
+
+    # Whisky / Wine wrappers — caches rebuild on next bottle launch
+    rm_children "$USER_HOME/Library/Caches/com.isaacmarovitz.Whisky" "Whisky cache"
+
     log "Application caches cleaned"
+}
+
+cleanup_app_updater_caches() {
+    section "App Auto-Updater Caches (Squirrel-style)"
+
+    # Squirrel.Mac auto-updaters (Electron apps) cache pending update payloads
+    # that are safe to remove — they re-download next time an update runs.
+    [[ -d "$USER_HOME/Library/Caches" ]] || return 0
+
+    local cache_dir
+    for cache_dir in "$USER_HOME/Library/Caches"/*-updater \
+                     "$USER_HOME/Library/Caches"/*ShipIt; do
+        [[ -d "$cache_dir" ]] || continue
+        rm_children "$cache_dir" "Updater cache: $(basename "$cache_dir")"
+    done
+
+    log "Auto-updater caches cleaned"
 }
 
 cleanup_ios_data() {
@@ -916,6 +985,7 @@ main() {
     cleanup_browser_caches
     cleanup_development_tools
     cleanup_applications
+    cleanup_app_updater_caches
     cleanup_ios_data
     cleanup_mail
     cleanup_system_maintenance
