@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# macOS Unified Cleanup Script v3
+# macOS Unified Cleanup Script v2
 # Comprehensive system maintenance combining best practices from multiple cleanup approaches
 #
 # Features:
