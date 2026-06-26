@@ -23,8 +23,8 @@ set -euo pipefail
 # -----------------------------
 # Configuration
 # -----------------------------
-readonly SCRIPT_NAME="macOS Unified Cleanup v3"
-readonly SCRIPT_VERSION="3.0.0"
+readonly SCRIPT_NAME="macOS Unified Cleanup v2"
+readonly SCRIPT_VERSION="2.2.4"
 readonly MIN_BACKUP_AGE=3600      # 1 hour in seconds
 readonly OLD_BACKUP_DAYS=180
 readonly OLD_FILE_DAYS=30
@@ -118,26 +118,26 @@ Usage:
   sudo ./mac_cleanup_v2.sh [OPTIONS]
 
 Options:
-  --dry-run     Preview what would be removed without deleting anything
-  --aggressive  Enable more thorough cleanup operations (with additional prompts)
-  -y, --yes     Auto-accept all prompts (noninteractive mode)
-  -h, --help    Show this help message
-  --version     Show version information
+  -d, --dry-run     Preview what would be removed without deleting anything
+  -a, --aggressive  Enable more thorough cleanup operations (with additional prompts)
+  -y, --yes         Auto-accept all prompts (noninteractive mode)
+  -h, --help        Show this help message
+  -v, --version     Show version information
 
 Examples:
-  sudo ./mac_cleanup_v2.sh --dry-run       # Safe preview
-  sudo ./mac_cleanup_v2.sh                 # Interactive cleanup
-  sudo ./mac_cleanup_v2.sh --aggressive -y # Full automated cleanup
+  sudo ./mac_cleanup_v2.sh --dry-run          # Safe preview
+  sudo ./mac_cleanup_v2.sh                    # Interactive cleanup
+  sudo ./mac_cleanup_v2.sh --aggressive --yes # Full automated cleanup
 EOF
 }
 
 parse_args() {
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --dry-run)
+            -d|--dry-run)
                 DRY_RUN=1
                 ;;
-            --aggressive)
+            -a|--aggressive)
                 AGGRESSIVE=1
                 ;;
             -y|--yes)
@@ -147,7 +147,7 @@ parse_args() {
                 print_usage
                 exit 0
                 ;;
-            --version)
+            -v|--version)
                 echo "$SCRIPT_NAME v$SCRIPT_VERSION"
                 exit 0
                 ;;
