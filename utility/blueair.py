@@ -3,7 +3,9 @@
 # BLE provisioning tool that used to be the blueair_prov package (Espressif protocomm Security1 + Blueair custom endpoint,
 # Python port of github.com/kovapatrik/blueairble-rs; verified live on a Blue Pure 511i Max on 2026-09-28).
 #
-# Install (pip dependencies only, no sibling files):
+# Install (Python 3.10+; pip dependencies only, no sibling files):
+#   python3 blueair.py install        # creates the venv, installs deps + the `blueair` command, asks for your account
+# or by hand:
 #   python3 -m venv ~/.local/share/blueair-cli/venv
 #   ~/.local/share/blueair-cli/venv/bin/pip install blueair-api aiohttp bleak protobuf cryptography
 #   install -m 755 blueair.py ~/.local/bin/blueair
@@ -16,6 +18,7 @@
 """blueair — control Blueair purifiers on your account through Blueair's cloud API (uses the blueair-api library).
 
 Usage:
+  python3 blueair.py install          one-time setup on a new machine (venv, dependencies, command, credentials)
   blueair status                      show every device: online, standby, fan, auto, brightness, night, lock, filter, sensors
   blueair fan <0-100>                 set fan speed (percent; 511i Max uses 3 steps, values map to the nearest)
   blueair on | off                    leave / enter standby
@@ -55,18 +58,98 @@ import types
 from dataclasses import asdict, dataclass, field
 from typing import Any, Callable, Protocol
 
-from bleak import BleakClient, BleakScanner
-from bleak.backends.characteristic import BleakGATTCharacteristic
-from bleak.backends.device import BLEDevice
-from bleak.backends.scanner import AdvertisementData
-from bleak.exc import BleakError
-from blueair_api import DeviceAws, HttpAwsBlueair
-from blueair_api.const import AWS_APIKEYS
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey, X25519PublicKey
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-from google.protobuf import descriptor_pool
-from google.protobuf.message import DecodeError, Message
+# --------------------------------------------------------------------------------------------------------------------
+# SECTION: install — `python3 blueair.py install` (stdlib only; runs BEFORE the third-party imports below)
+# --------------------------------------------------------------------------------------------------------------------
+INSTALL_DEPS = ["blueair-api", "aiohttp", "bleak", "protobuf", "cryptography"]
+DEFAULT_VENV = os.path.expanduser("~/.local/share/blueair-cli/venv")
+DEFAULT_BIN = os.path.expanduser("~/.local/bin")
+DEFAULT_CFG = os.path.expanduser("~/.config/blueair/config.json")
+
+
+def _install(argv):
+    """Create the virtualenv, install dependencies, install this file as `blueair`, and write the credentials file."""
+    import getpass
+    import shutil
+    import subprocess
+
+    ap = argparse.ArgumentParser(prog="blueair.py install", description="Install blueair as a command (venv + deps + config).")
+    ap.add_argument("--venv", default=DEFAULT_VENV, help=f"virtualenv location (default {DEFAULT_VENV})")
+    ap.add_argument("--bin", default=DEFAULT_BIN, help=f"directory for the `blueair` command (default {DEFAULT_BIN})")
+    ap.add_argument("--no-config", action="store_true", help="do not prompt for / write account credentials")
+    ap.add_argument("--reconfigure", action="store_true", help="overwrite an existing credentials file")
+    a = ap.parse_args(argv)
+
+    if sys.version_info < (3, 10):
+        sys.exit(f"Python 3.10+ is required (this is {sys.version.split()[0]}). Install a newer python3 (e.g. `brew install python`) and rerun with it.")
+    if sys.platform == "darwin":
+        print("Note: Bluetooth pairing commands (discover/networks/setup) need macOS Bluetooth permission for your terminal app; "
+              "macOS asks on first use.", flush=True)
+
+    py = os.path.join(a.venv, "bin", "python")
+    if not os.path.exists(py):
+        print(f"[1/4] creating virtualenv {a.venv}", flush=True)
+        os.makedirs(os.path.dirname(a.venv), exist_ok=True)
+        subprocess.run([sys.executable, "-m", "venv", a.venv], check=True)
+    else:
+        print(f"[1/4] virtualenv exists: {a.venv}", flush=True)
+    print(f"[2/4] installing {' '.join(INSTALL_DEPS)}", flush=True)
+    subprocess.run([py, "-m", "pip", "install", "-q", "--upgrade", *INSTALL_DEPS], check=True)
+
+    os.makedirs(a.bin, exist_ok=True)
+    target = os.path.join(a.bin, "blueair")
+    with open(os.path.abspath(__file__), encoding="utf-8") as f:
+        body = f.read().split("\n", 1)[1]
+    with open(target, "w", encoding="utf-8") as f:
+        f.write(f"#!{py}\n" + body)
+    os.chmod(target, 0o755)
+    print(f"[3/4] installed command: {target}", flush=True)
+
+    if a.no_config:
+        print("[4/4] skipping credentials (--no-config)", flush=True)
+    elif os.path.exists(DEFAULT_CFG) and not a.reconfigure:
+        print(f"[4/4] credentials already present: {DEFAULT_CFG} (use --reconfigure to replace)", flush=True)
+    else:
+        print("[4/4] Blueair account (the same login as the phone app; a Google-only account needs a password added first "
+              "via 'Forgot password')", flush=True)
+        user = input("  e-mail: ").strip()
+        pw = getpass.getpass("  password: ")
+        region = (input("  region [us/eu/cn/au] (default us): ").strip().lower() or "us")
+        if region not in ("us", "eu", "cn", "au"):
+            sys.exit("region must be one of us, eu, cn, au")
+        os.makedirs(os.path.dirname(DEFAULT_CFG), mode=0o700, exist_ok=True)
+        fd = os.open(DEFAULT_CFG, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as f:
+            json.dump({"username": user, "password": pw, "region": region}, f)
+        print(f"  written {DEFAULT_CFG} (mode 600)", flush=True)
+
+    rc = subprocess.run([py, target, "--help"], capture_output=True).returncode
+    print("self-test:", "OK" if rc == 0 else f"FAILED (exit {rc})", flush=True)
+    if not any(os.path.realpath(p) == os.path.realpath(a.bin) for p in os.environ.get("PATH", "").split(os.pathsep) if p):
+        print(f"\nAdd the command directory to your PATH, e.g.:  echo 'export PATH=\"{a.bin}:$PATH\"' >> ~/.zshrc && source ~/.zshrc", flush=True)
+    print("\nNext:  blueair status        (cloud)\n       blueair setup --ssid <2.4GHz network>   (pair a new purifier over Bluetooth)", flush=True)
+    return 0 if rc == 0 else 1
+
+
+if __name__ == "__main__" and len(sys.argv) > 1 and sys.argv[1] == "install":
+    sys.exit(_install(sys.argv[2:]))
+
+try:
+    from bleak import BleakClient, BleakScanner
+    from bleak.backends.characteristic import BleakGATTCharacteristic
+    from bleak.backends.device import BLEDevice
+    from bleak.backends.scanner import AdvertisementData
+    from bleak.exc import BleakError
+    from blueair_api import DeviceAws, HttpAwsBlueair
+    from blueair_api.const import AWS_APIKEYS
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey, X25519PublicKey
+    from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+    from google.protobuf import descriptor_pool
+    from google.protobuf.message import DecodeError, Message
+except ImportError as _e:   # fresh machine: only `install` (above) and this message work without the dependencies
+    sys.exit(f"missing dependency ({_e.name}). Run:  python3 {os.path.basename(__file__)} install   "
+             f"(or: pip install {' '.join(INSTALL_DEPS)})")
 
 __version__ = "0.1.0"  # provisioning tool version (`blueair prov --version`)
 
