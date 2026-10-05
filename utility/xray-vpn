@@ -28,7 +28,7 @@
 #           [auth] uuid, private_key      [cloudflare] api_token (Tunnel Write + DNS Write), hostname
 #           Everything else is derived or looked up. Optional overrides:
 #           [server] host port sni public_port lan_host ssh loglevel · [auth] public_key short_id
-#           [cloudflare] path local_port enabled · [client] socks_port http_port
+#           [cloudflare] path local_port enabled · [client] fingerprint (default safari) socks_port http_port
 #           Clients fetch their copy with `xray-vpn sync` (over ssh to the server).
 #
 # PATH SWITCHES  xray-vpn server cloudflare on|off · xray-vpn server direct on <host>|off  — edit config.toml for you,
@@ -95,6 +95,8 @@ load_conf(){
   CFT=false; [ -n "$CFT_HOST" ] && [ "${CFG_cloudflare_enabled:-true}" != false ] && CFT=true
   DIRECT=false; [ -n "$HOST" ] && [ "${CFG_server_direct:-true}" != false ] && DIRECT=true
   SOCKS_PORT="${CFG_client_socks_port:-10808}"; HTTP_PORT="${CFG_client_http_port:-10809}"
+  FP="${CFG_client_fingerprint:-safari}"   # TLS fingerprint the client imitates; "safari" sends a classic one-record ClientHello (the "chrome" preset adds a post-quantum key share that some older middleboxes reset)
+  case "$FP" in chrome|firefox|safari|ios|android|edge|360|qq|random|randomized) ;; *) die "$CONF: client.fingerprint must be one of chrome firefox safari ios android edge 360 qq random randomized (got '$FP')";; esac
   if is_server; then
     [ -n "$PUBLIC_KEY" ] || PUBLIC_KEY=$("$XRAY_BIN" x25519 -i "$PRIVATE_KEY" 2>/dev/null | awk '/Password|Public/{print $NF}' | head -1)
     [ -n "$PUBLIC_KEY" ] || die "cannot derive the public key from auth.private_key (is it a valid x25519 private key?)"
@@ -115,7 +117,8 @@ client_toml(){ # the subset a client needs (defaults omitted)
   [ "$PORT" != 8443 ] && echo "port = $PORT"; [ "$SNI" != www.apple.com ] && echo "sni = \"$SNI\""; [ "$PUBLIC_PORT" != 443 ] && echo "public_port = $PUBLIC_PORT"
   echo; echo '[auth]'; echo "uuid = \"$UUID\""; echo "public_key = \"$PUBLIC_KEY\""
   [ -n "${CFG_auth_short_id:-}" ] && echo "short_id = \"$SHORT_ID\""
-  if [ "$CFT" = true ]; then echo; echo '[cloudflare]'; echo "hostname = \"$CFT_HOST\""; [ -n "${CFG_cloudflare_path:-}" ] && echo "path = \"$CFT_PATH\""; fi; true; }
+  if [ "$CFT" = true ]; then echo; echo '[cloudflare]'; echo "hostname = \"$CFT_HOST\""; [ -n "${CFG_cloudflare_path:-}" ] && echo "path = \"$CFT_PATH\""; fi
+  if [ "$FP" != safari ] || [ "$SOCKS_PORT" != 10808 ] || [ "$HTTP_PORT" != 10809 ]; then echo; echo '[client]'; [ "$FP" != safari ] && echo "fingerprint = \"$FP\""; [ "$SOCKS_PORT" != 10808 ] && echo "socks_port = $SOCKS_PORT"; [ "$HTTP_PORT" != 10809 ] && echo "http_port = $HTTP_PORT"; fi; true; }
 sync_conf(){
   local ssh_host; ssh_host=$(awk "$TOML_AWK" "$CONF" 2>/dev/null | awk -F"'" '/^CFG_server_ssh=/{print $2}'); ssh_host="${ssh_host:-jason-mbp}"
   mkdir -p "$CFG_DIR"; umask 077
@@ -146,15 +149,15 @@ proxy_off(){ local svc r=1; svc=$(active_service)
   return $r; }
 proxy_is_on(){ networksetup -getsocksfirewallproxy "$(active_service)" | grep -q '^Enabled: Yes'; }
 exit_ip(){ curl -4 -s --max-time "${1:-12}" --socks5-hostname "127.0.0.1:$SOCKS_PORT" https://api.ipify.org; }
-link_direct(){ echo "vless://${UUID}@${HOST:-$LAN_HOST}:${PUBLIC_PORT}?encryption=none&flow=xtls-rprx-vision&security=reality&sni=${SNI}&fp=chrome&pbk=${PUBLIC_KEY}&sid=${SHORT_ID}&spx=%2F&type=tcp#home-direct"; }
-link_cloudflare(){ echo "vless://${UUID}@${CFT_HOST}:443?encryption=none&security=tls&sni=${CFT_HOST}&fp=chrome&type=ws&host=${CFT_HOST}&path=$(urlenc "$CFT_PATH")#home-cloudflare"; }
+link_direct(){ echo "vless://${UUID}@${HOST:-$LAN_HOST}:${PUBLIC_PORT}?encryption=none&flow=xtls-rprx-vision&security=reality&sni=${SNI}&fp=${FP}&pbk=${PUBLIC_KEY}&sid=${SHORT_ID}&spx=%2F&type=tcp#home-direct"; }
+link_cloudflare(){ echo "vless://${UUID}@${CFT_HOST}:443?encryption=none&security=tls&sni=${CFT_HOST}&fp=${FP}&type=ws&host=${CFT_HOST}&path=$(urlenc "$CFT_PATH")#home-cloudflare"; }
 link_pick(){ local w="${1:-}"; [ -n "$w" ] || { [ "$CFT" = true ] && w=cloudflare || w=direct; }
   case "$w" in direct|home) [ "$DIRECT" = true ] || die "the direct path is off (xray-vpn server direct on <host>)"; link_direct;; cloudflare|cf) [ "$CFT" = true ] || die "the Cloudflare path is off (xray-vpn server cloudflare on)"; link_cloudflare;; *) die "usage: xray-vpn qr [cloudflare|direct]";; esac; }
 write_client(){ # $1 address  $2 port  $3 reality|ws
   mkdir -p "$CFG_DIR" "$(dirname "$LOG")"; umask 077
   local users stream
-  if [ "$3" = ws ]; then users="[{\"id\": \"$UUID\", \"encryption\": \"none\"}]"; stream="{\"network\": \"ws\", \"security\": \"tls\", \"tlsSettings\": {\"serverName\": \"$CFT_HOST\", \"fingerprint\": \"chrome\"}, \"wsSettings\": {\"path\": \"$CFT_PATH\", \"host\": \"$CFT_HOST\"}}"
-  else users="[{\"id\": \"$UUID\", \"encryption\": \"none\", \"flow\": \"xtls-rprx-vision\"}]"; stream="{\"network\": \"tcp\", \"security\": \"reality\", \"realitySettings\": {\"serverName\": \"$SNI\", \"fingerprint\": \"chrome\", \"publicKey\": \"$PUBLIC_KEY\", \"shortId\": \"$SHORT_ID\", \"spiderX\": \"/\"}}"; fi
+  if [ "$3" = ws ]; then users="[{\"id\": \"$UUID\", \"encryption\": \"none\"}]"; stream="{\"network\": \"ws\", \"security\": \"tls\", \"tlsSettings\": {\"serverName\": \"$CFT_HOST\", \"fingerprint\": \"$FP\"}, \"wsSettings\": {\"path\": \"$CFT_PATH\", \"host\": \"$CFT_HOST\"}}"
+  else users="[{\"id\": \"$UUID\", \"encryption\": \"none\", \"flow\": \"xtls-rprx-vision\"}]"; stream="{\"network\": \"tcp\", \"security\": \"reality\", \"realitySettings\": {\"serverName\": \"$SNI\", \"fingerprint\": \"$FP\", \"publicKey\": \"$PUBLIC_KEY\", \"shortId\": \"$SHORT_ID\", \"spiderX\": \"/\"}}"; fi
   cat > "$CLIENT" <<JSON
 {
   "log": {"loglevel": "warning", "access": "$ALOG", "error": "$LOG"},
@@ -355,9 +358,9 @@ PL
 srv_selftest(){ # [cloudflare]  default: loopback Reality
   local T CP R P label tries=1 cfg; T=$(mktemp -d)
   if [ "${1:-}" = cloudflare ]; then
-    cfg=$(printf '{"log":{"loglevel":"warning"},"inbounds":[{"listen":"127.0.0.1","port":10897,"protocol":"socks"}],"outbounds":[{"protocol":"vless","settings":{"vnext":[{"address":"%s","port":443,"users":[{"id":"%s","encryption":"none"}]}]},"streamSettings":{"network":"ws","security":"tls","tlsSettings":{"serverName":"%s","fingerprint":"chrome"},"wsSettings":{"path":"%s","host":"%s"}}}]}' "$CFT_HOST" "$UUID" "$CFT_HOST" "$CFT_PATH" "$CFT_HOST"); P=10897; label="cloudflare path (internet -> $CFT_HOST -> this Mac)"; tries=3
+    cfg=$(printf '{"log":{"loglevel":"warning"},"inbounds":[{"listen":"127.0.0.1","port":10897,"protocol":"socks"}],"outbounds":[{"protocol":"vless","settings":{"vnext":[{"address":"%s","port":443,"users":[{"id":"%s","encryption":"none"}]}]},"streamSettings":{"network":"ws","security":"tls","tlsSettings":{"serverName":"%s","fingerprint":"%s"},"wsSettings":{"path":"%s","host":"%s"}}}]}' "$CFT_HOST" "$UUID" "$CFT_HOST" "$FP" "$CFT_PATH" "$CFT_HOST"); P=10897; label="cloudflare path (internet -> $CFT_HOST -> this Mac)"; tries=3
   else
-    cfg=$(printf '{"log":{"loglevel":"warning"},"inbounds":[{"listen":"127.0.0.1","port":10899,"protocol":"socks"}],"outbounds":[{"protocol":"vless","settings":{"vnext":[{"address":"127.0.0.1","port":%s,"users":[{"id":"%s","encryption":"none","flow":"xtls-rprx-vision"}]}]},"streamSettings":{"network":"tcp","security":"reality","realitySettings":{"serverName":"%s","fingerprint":"chrome","publicKey":"%s","shortId":"%s","spiderX":"/"}}}]}' "$PORT" "$UUID" "$SNI" "$PUBLIC_KEY" "$SHORT_ID"); P=10899; label="loopback tunnel"
+    cfg=$(printf '{"log":{"loglevel":"warning"},"inbounds":[{"listen":"127.0.0.1","port":10899,"protocol":"socks"}],"outbounds":[{"protocol":"vless","settings":{"vnext":[{"address":"127.0.0.1","port":%s,"users":[{"id":"%s","encryption":"none","flow":"xtls-rprx-vision"}]}]},"streamSettings":{"network":"tcp","security":"reality","realitySettings":{"serverName":"%s","fingerprint":"%s","publicKey":"%s","shortId":"%s","spiderX":"/"}}}]}' "$PORT" "$UUID" "$SNI" "$FP" "$PUBLIC_KEY" "$SHORT_ID"); P=10899; label="loopback tunnel"
   fi
   echo "$cfg" > "$T/c.json"; "$XRAY_BIN" run -config "$T/c.json" >"$T/log" 2>&1 & CP=$!; sleep 2
   R=""; while [ $tries -gt 0 ]; do R=$(curl -4 -s --max-time 25 --socks5-hostname 127.0.0.1:$P https://api.ipify.org); [ -n "$R" ] && break; tries=$((tries-1)); [ $tries -gt 0 ] && sleep 4; done
